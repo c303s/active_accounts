@@ -205,15 +205,15 @@ def sanitize_filename_component(value: str) -> str:
 
 
 def build_identity_chart(account_counts: dict[str, int]) -> Drawing:
-    drawing = Drawing(240, 220)
-    drawing.add(Rect(0, 0, 240, 220, fillColor=colors.white, strokeColor=CROWDSTRIKE_GRAY))
-    drawing.add(String(14, 196, "Identity Distribution", fontName="Helvetica-Bold", fontSize=13, fillColor=CROWDSTRIKE_BLACK))
+    drawing = Drawing(500, 240)
+    drawing.add(Rect(0, 0, 500, 240, fillColor=colors.white, strokeColor=CROWDSTRIKE_GRAY))
+    drawing.add(String(18, 214, "Identity Distribution", fontName="Helvetica-Bold", fontSize=14, fillColor=CROWDSTRIKE_BLACK))
 
     pie = Pie()
-    pie.x = 10
-    pie.y = 30
-    pie.width = 140
-    pie.height = 140
+    pie.x = 24
+    pie.y = 26
+    pie.width = 180
+    pie.height = 180
     pie.data = [
         account_counts["human"],
         account_counts["service"],
@@ -228,46 +228,48 @@ def build_identity_chart(account_counts: dict[str, int]) -> Drawing:
     drawing.add(pie)
 
     legend = Legend()
-    legend.x = 150
-    legend.y = 130
+    legend.x = 250
+    legend.y = 150
     legend.colorNamePairs = [
         (CROWDSTRIKE_RED, f"Human ({account_counts['human']})"),
         (CROWDSTRIKE_MID, f"Service ({account_counts['service']})"),
         (colors.HexColor("#9C9C9C"), f"Admin ({account_counts['admin']})"),
     ]
     legend.fontName = "Helvetica"
-    legend.fontSize = 9
-    legend.alignment = "right"
+    legend.fontSize = 11
+    legend.dxTextSpace = 8
+    legend.dy = 18
+    legend.deltay = 22
     drawing.add(legend)
 
     return drawing
 
 
 def build_endpoint_chart(domain_rows: list[dict[str, int | str]]) -> Drawing:
-    drawing = Drawing(280, 220)
-    drawing.add(Rect(0, 0, 280, 220, fillColor=colors.white, strokeColor=CROWDSTRIKE_GRAY))
-    drawing.add(String(14, 196, "Endpoints by Domain", fontName="Helvetica-Bold", fontSize=13, fillColor=CROWDSTRIKE_BLACK))
+    drawing = Drawing(500, 260)
+    drawing.add(Rect(0, 0, 500, 260, fillColor=colors.white, strokeColor=CROWDSTRIKE_GRAY))
+    drawing.add(String(18, 232, "Endpoints by Domain", fontName="Helvetica-Bold", fontSize=14, fillColor=CROWDSTRIKE_BLACK))
 
     top_domains = sorted(domain_rows, key=lambda row: int(row["endpoints"]), reverse=True)[:6]
     bar_chart = HorizontalBarChart()
-    bar_chart.x = 86
-    bar_chart.y = 26
-    bar_chart.width = 170
-    bar_chart.height = 140
+    bar_chart.x = 165
+    bar_chart.y = 34
+    bar_chart.width = 300
+    bar_chart.height = 160
     bar_chart.data = [[int(row["endpoints"]) for row in top_domains] or [0]]
-    bar_chart.categoryAxis.categoryNames = [str(row["domain"])[:18] for row in top_domains] or ["No domains"]
+    bar_chart.categoryAxis.categoryNames = [str(row["domain"])[:28] for row in top_domains] or ["No domains"]
     bar_chart.categoryAxis.labels.boxAnchor = "e"
-    bar_chart.categoryAxis.labels.dx = -6
+    bar_chart.categoryAxis.labels.dx = -10
     bar_chart.categoryAxis.labels.fontName = "Helvetica"
-    bar_chart.categoryAxis.labels.fontSize = 8
+    bar_chart.categoryAxis.labels.fontSize = 9
     bar_chart.valueAxis.labels.fontName = "Helvetica"
-    bar_chart.valueAxis.labels.fontSize = 8
+    bar_chart.valueAxis.labels.fontSize = 9
     bar_chart.valueAxis.strokeColor = CROWDSTRIKE_GRAY
     bar_chart.categoryAxis.strokeColor = CROWDSTRIKE_GRAY
     bar_chart.bars[0].fillColor = CROWDSTRIKE_RED
     bar_chart.bars[0].strokeColor = CROWDSTRIKE_RED
-    bar_chart.barSpacing = 5
-    bar_chart.groupSpacing = 7
+    bar_chart.barSpacing = 6
+    bar_chart.groupSpacing = 10
     drawing.add(bar_chart)
 
     return drawing
@@ -335,11 +337,11 @@ def write_pdf_report(
 
     header_right = ""
     if LOGO_PATH.exists():
-        header_right = Image(str(LOGO_PATH), width=34 * mm, height=34 * mm)
+        header_right = Image(str(LOGO_PATH), width=46 * mm, height=16 * mm)
     else:
         header_right = Table(
             [[Paragraph("CROWDSTRIKE", ParagraphStyle("HeaderBadge", parent=small_style, fontName="Helvetica-Bold", fontSize=12, textColor=colors.white, alignment=1))]],
-            colWidths=[40 * mm],
+            colWidths=[46 * mm],
             rowHeights=[14 * mm],
         )
         header_right.setStyle(
@@ -352,7 +354,7 @@ def write_pdf_report(
             )
         )
 
-    header_table = Table([[header_left, header_right]], colWidths=[125 * mm, 45 * mm])
+    header_table = Table([[header_left, header_right]], colWidths=[122 * mm, 48 * mm])
     header_table.setStyle(
         TableStyle(
             [
@@ -398,26 +400,11 @@ def write_pdf_report(
 
     story.append(summary_table)
     story.append(Spacer(1, 10))
-    chart_row = Table(
-        [[build_identity_chart(category_counts), build_endpoint_chart(domain_rows)]],
-        colWidths=[78 * mm, 92 * mm],
-    )
-    chart_row.setStyle(
-        TableStyle(
-            [
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-                ("TOPPADDING", (0, 0), (-1, -1), 0),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-            ]
-        )
-    )
-    story.append(chart_row)
+    story.append(build_identity_chart(category_counts))
     story.append(Spacer(1, 10))
+    story.append(build_endpoint_chart(domain_rows))
+    story.append(Spacer(1, 12))
     story.append(Paragraph("Active Directory Domains", heading_style))
-    story.append(Paragraph("A local file named crowdstrike-logo.png will be embedded automatically if present next to the script.", small_style))
-    story.append(Spacer(1, 6))
 
     domain_table_data = [["Domain", "Endpoints", "Total", "Human", "Service", "Admin"]]
     for row in domain_rows:
