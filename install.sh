@@ -5,6 +5,7 @@ set -euo pipefail
 REPO_OWNER="c303s"
 REPO_NAME="crowdstrike-falcon-tenant-report"
 REPO_BRANCH="${REPO_BRANCH:-main}"
+APP_VERSION="0.01"
 INSTALL_DIR="${INSTALL_DIR:-$(pwd -P)}"
 WRAPPER_PATH="$INSTALL_DIR/crowdstrike-falcon-tenant-report"
 ARCHIVE_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}/archive/refs/heads/${REPO_BRANCH}.tar.gz"
@@ -67,6 +68,11 @@ echo "Installing dependencies..."
 "$INSTALL_DIR/.venv/bin/pip" install -r "$INSTALL_DIR/requirements.txt"
 
 if [[ ! -f "$INSTALL_DIR/.env" ]]; then
+    echo "CrowdStrike Falcon Tenant Report v${APP_VERSION}"
+    echo "Before continuing, create a Falcon API client with these scopes enabled:"
+    echo "  - Hosts: Read"
+    echo "  - Sensor Download: Read"
+    echo "  - Identity Protection: Read"
     client_id="$(prompt_value "Enter FALCON_CLIENT_ID")"
     client_secret="$(prompt_value "Enter FALCON_CLIENT_SECRET" true)"
     base_url="$(prompt_value "Enter FALCON_BASE_URL" false "$DEFAULT_BASE_URL")"
@@ -87,6 +93,6 @@ EOF
 chmod +x "$WRAPPER_PATH"
 
 echo
-echo "Install complete."
+echo "Install complete for CrowdStrike Falcon Tenant Report v${APP_VERSION}."
 echo "Install directory: $INSTALL_DIR"
 echo "Command: ./$(basename "$WRAPPER_PATH")"

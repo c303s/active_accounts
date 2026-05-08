@@ -29,6 +29,7 @@ TENANT_DISPLAY_NAMES = {
     "airventmain": "AUNDE Group SE",
 }
 
+APP_VERSION = "0.01"
 DEFAULT_BASE_URL = "https://api.eu-1.crowdstrike.com"
 ENV_PATH = Path(__file__).with_name(".env")
 SCRIPT_PATH = Path(__file__).name
@@ -124,7 +125,12 @@ def ensure_local_credentials() -> None:
             "Missing Falcon credentials. Run the script interactively once or create a local .env file."
         )
 
+    print(f"CrowdStrike Falcon Tenant Report v{APP_VERSION}")
     print("Falcon API credentials are missing. Let's create a local .env file.")
+    print("Before continuing, create a Falcon API client with these scopes enabled:")
+    print("  - Hosts: Read")
+    print("  - Sensor Download: Read")
+    print("  - Identity Protection: Read")
 
     if not client_id:
         client_id = prompt_env_value("FALCON_CLIENT_ID", "Enter FALCON_CLIENT_ID")
@@ -331,8 +337,8 @@ def write_pdf_report(
     )
 
     header_left = [
-        Paragraph("CrowdStrike Falcon Tenant Report", title_style),
-        Paragraph(f"Tenant: {tenant_label}<br/>CID: {cid_value}<br/>Generated: {current_timestamp}", subtitle_style),
+        Paragraph(f"CrowdStrike Falcon Tenant Report v{APP_VERSION}", title_style),
+        Paragraph(f"Tenant: {tenant_label}<br/>CID: {cid_value}<br/>Generated: {current_timestamp}<br/>Version: {APP_VERSION}", subtitle_style),
     ]
 
     header_right = ""
@@ -792,6 +798,7 @@ clear_screen()
 print(f"Tenant                  : {tenant_label}")
 print(f"CID                     : {cid_value}")
 print(f"Current date and time   : {current_timestamp}")
+print(f"Version                 : {APP_VERSION}")
 print()
 print(f"Endpoints with an installed CrowdStrike sensor : {total_endpoints}")
 print()
@@ -836,6 +843,7 @@ with open(csv_filename, "w", newline="", encoding="utf-8") as csv_file:
     writer.writerow(["summary", "tenant", tenant_label, "", "", "", "", "", ""])
     writer.writerow(["summary", "cid", cid_value, "", "", "", "", "", ""])
     writer.writerow(["summary", "current_date_time", current_timestamp, "", "", "", "", "", ""])
+    writer.writerow(["summary", "version", APP_VERSION, "", "", "", "", "", ""])
     writer.writerow(["summary", "protected_endpoints", total_endpoints, "", "", "", "", "", ""])
     writer.writerow(["summary", "human_accounts", category_counts["human"], "", "", "", "", "", ""])
     writer.writerow(["summary", "service_accounts", category_counts["service"], "", "", "", "", "", ""])

@@ -1,4 +1,4 @@
-# CrowdStrike Falcon Tenant Report
+# CrowdStrike Falcon Tenant Report v0.01
 
 This repository contains a small Python script that connects to CrowdStrike Falcon and prints a terminal report with:
 
@@ -12,6 +12,8 @@ This repository contains a small Python script that connects to CrowdStrike Falc
 - a PDF export with charts and CrowdStrike-themed styling
 
 The main script is `active_accounts.py`.
+
+Current version: `0.01`
 
 ## What The Script Uses
 
@@ -45,6 +47,7 @@ The installer will:
 - download the latest version of the repository into the current directory
 - create a local virtual environment
 - install the Python dependencies
+- show a reminder that a Falcon API client must already exist with the required scopes enabled
 - ask for `FALCON_CLIENT_ID`, `FALCON_CLIENT_SECRET`, and `FALCON_BASE_URL` if they are not already available
 - store those credentials in a local `.env` file with restricted file permissions
 - create a local launcher at `./crowdstrike-falcon-tenant-report`
@@ -64,6 +67,12 @@ pip install -r requirements.txt
 Create a local `.env` file based on `.env.example`.
 
 If the script does not find `FALCON_CLIENT_ID`, `FALCON_CLIENT_SECRET`, or `FALCON_BASE_URL`, it starts an interactive setup wizard and writes them to a local `.env` file automatically.
+
+Before entering credentials, make sure a Falcon API client already exists with these scopes enabled:
+
+- `Hosts: Read`
+- `Sensor Download: Read`
+- `Identity Protection: Read`
 
 Required variables:
 
@@ -99,6 +108,7 @@ Example output:
 Tenant                  : Example Tenant
 CID                     : 0123456789ABCDEF0123456789ABCDEF
 Current date and time   : 08.05.2026 07:00:00 UTC
+Version                 : 0.01
 
 Endpoints with an installed CrowdStrike sensor : 6654
 
