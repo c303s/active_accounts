@@ -41,12 +41,14 @@ Download, install, and set up the script with a single command:
 
 The installer will:
 
-- download the latest version of the repository into `~/.crowdstrike-falcon-tenant-report`
+- download the latest version of the repository into the current directory
 - create a local virtual environment
 - install the Python dependencies
-- ask for `FALCON_CLIENT_ID` and `FALCON_CLIENT_SECRET` if they are not already available
+- ask for `FALCON_CLIENT_ID`, `FALCON_CLIENT_SECRET`, and `FALCON_BASE_URL` if they are not already available
 - store those credentials in a local `.env` file with restricted file permissions
-- create a launcher at `~/.local/bin/crowdstrike-falcon-tenant-report`
+- create a local launcher at `./crowdstrike-falcon-tenant-report`
+
+Run the installer from the directory where you want the project files to live.
 
 Install dependencies:
 
@@ -60,7 +62,7 @@ pip install -r requirements.txt
 
 Create a local `.env` file based on `.env.example`.
 
-If the script does not find `FALCON_CLIENT_ID` or `FALCON_CLIENT_SECRET`, it starts an interactive setup wizard and writes them to a local `.env` file automatically.
+If the script does not find `FALCON_CLIENT_ID`, `FALCON_CLIENT_SECRET`, or `FALCON_BASE_URL`, it starts an interactive setup wizard and writes them to a local `.env` file automatically.
 
 Required variables:
 

@@ -22,6 +22,8 @@ TENANT_DISPLAY_NAMES = {
 
 DEFAULT_BASE_URL = "https://api.eu-1.crowdstrike.com"
 ENV_PATH = Path(__file__).with_name(".env")
+SCRIPT_PATH = Path(__file__).name
+LAUNCHER_PATH = Path(__file__).with_name("crowdstrike-falcon-tenant-report")
 
 
 def read_env_file(path: Path) -> dict[str, str]:
@@ -68,12 +70,21 @@ def write_env_file(path: Path, values: dict[str, str]) -> None:
         pass
 
 
-def prompt_env_value(name: str, prompt_text: str, secret: bool = False) -> str:
+def prompt_env_value(
+    name: str,
+    prompt_text: str,
+    secret: bool = False,
+    default: str | None = None,
+) -> str:
     while True:
+        prompt_suffix = f" [{default}]" if default else ""
         if secret:
-            value = getpass.getpass(f"{prompt_text}: ").strip()
+            value = getpass.getpass(f"{prompt_text}{prompt_suffix}: ").strip()
         else:
-            value = input(f"{prompt_text}: ").strip()
+            value = input(f"{prompt_text}{prompt_suffix}: ").strip()
+
+        if not value and default is not None:
+            return default
 
         if value:
             return value
@@ -86,8 +97,9 @@ def ensure_local_credentials() -> None:
     env_values = read_env_file(ENV_PATH)
     client_id = os.environ.get("FALCON_CLIENT_ID") or env_values.get("FALCON_CLIENT_ID")
     client_secret = os.environ.get("FALCON_CLIENT_SECRET") or env_values.get("FALCON_CLIENT_SECRET")
+    base_url = os.environ.get("FALCON_BASE_URL") or env_values.get("FALCON_BASE_URL")
 
-    if client_id and client_secret:
+    if client_id and client_secret and base_url:
         return
 
     if not sys.stdin.isatty():
@@ -107,20 +119,27 @@ def ensure_local_credentials() -> None:
             secret=True,
         )
 
+    if not base_url:
+        base_url = prompt_env_value(
+            "FALCON_BASE_URL",
+            "Enter FALCON_BASE_URL",
+            default=DEFAULT_BASE_URL,
+        )
+
     env_values["FALCON_CLIENT_ID"] = client_id
     env_values["FALCON_CLIENT_SECRET"] = client_secret
-    env_values["FALCON_BASE_URL"] = (
-        os.environ.get("FALCON_BASE_URL")
-        or env_values.get("FALCON_BASE_URL")
-        or DEFAULT_BASE_URL
-    )
+    env_values["FALCON_BASE_URL"] = base_url
 
     write_env_file(ENV_PATH, env_values)
     os.environ["FALCON_CLIENT_ID"] = client_id
     os.environ["FALCON_CLIENT_SECRET"] = client_secret
-    os.environ.setdefault("FALCON_BASE_URL", env_values["FALCON_BASE_URL"])
+    os.environ["FALCON_BASE_URL"] = base_url
 
     print(f"Saved credentials to {ENV_PATH.name}.")
+    print("Run the report with one of these commands:")
+    print(f"  python3 {SCRIPT_PATH}")
+    if LAUNCHER_PATH.exists():
+        print(f"  ./{LAUNCHER_PATH.name}")
 
 
 def derive_tenant_label_from_domains(domains: set[str]) -> str | None:
