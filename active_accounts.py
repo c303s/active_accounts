@@ -3,10 +3,12 @@ import sys
 import atexit
 import json
 import csv
+import getpass
 import threading
 import time
 from datetime import datetime, timedelta, timezone
 from itertools import cycle
+from pathlib import Path
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
@@ -17,6 +19,108 @@ TENANT_DISPLAY_NAMES = {
     "aunde": "AUNDE Group SE",
     "airventmain": "AUNDE Group SE",
 }
+
+DEFAULT_BASE_URL = "https://api.eu-1.crowdstrike.com"
+ENV_PATH = Path(__file__).with_name(".env")
+
+
+def read_env_file(path: Path) -> dict[str, str]:
+    values = {}
+    if not path.exists():
+        return values
+
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key.strip()] = value.strip()
+
+    return values
+
+
+def write_env_file(path: Path, values: dict[str, str]) -> None:
+    ordered_keys = [
+        "FALCON_CLIENT_ID",
+        "FALCON_CLIENT_SECRET",
+        "FALCON_BASE_URL",
+        "FALCON_TENANT_NAME",
+        "FALCON_CID",
+    ]
+    lines = []
+    seen_keys = set()
+
+    for key in ordered_keys:
+        value = values.get(key)
+        if value:
+            lines.append(f"{key}={value}")
+            seen_keys.add(key)
+
+    for key in sorted(values):
+        if key in seen_keys or not values[key]:
+            continue
+        lines.append(f"{key}={values[key]}")
+
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
+
+
+def prompt_env_value(name: str, prompt_text: str, secret: bool = False) -> str:
+    while True:
+        if secret:
+            value = getpass.getpass(f"{prompt_text}: ").strip()
+        else:
+            value = input(f"{prompt_text}: ").strip()
+
+        if value:
+            return value
+
+        print(f"{name} cannot be empty.")
+
+
+def ensure_local_credentials() -> None:
+    load_dotenv()
+    env_values = read_env_file(ENV_PATH)
+    client_id = os.environ.get("FALCON_CLIENT_ID") or env_values.get("FALCON_CLIENT_ID")
+    client_secret = os.environ.get("FALCON_CLIENT_SECRET") or env_values.get("FALCON_CLIENT_SECRET")
+
+    if client_id and client_secret:
+        return
+
+    if not sys.stdin.isatty():
+        raise RuntimeError(
+            "Missing Falcon credentials. Run the script interactively once or create a local .env file."
+        )
+
+    print("Falcon API credentials are missing. Let's create a local .env file.")
+
+    if not client_id:
+        client_id = prompt_env_value("FALCON_CLIENT_ID", "Enter FALCON_CLIENT_ID")
+
+    if not client_secret:
+        client_secret = prompt_env_value(
+            "FALCON_CLIENT_SECRET",
+            "Enter FALCON_CLIENT_SECRET",
+            secret=True,
+        )
+
+    env_values["FALCON_CLIENT_ID"] = client_id
+    env_values["FALCON_CLIENT_SECRET"] = client_secret
+    env_values["FALCON_BASE_URL"] = (
+        os.environ.get("FALCON_BASE_URL")
+        or env_values.get("FALCON_BASE_URL")
+        or DEFAULT_BASE_URL
+    )
+
+    write_env_file(ENV_PATH, env_values)
+    os.environ["FALCON_CLIENT_ID"] = client_id
+    os.environ["FALCON_CLIENT_SECRET"] = client_secret
+    os.environ.setdefault("FALCON_BASE_URL", env_values["FALCON_BASE_URL"])
+
+    print(f"Saved credentials to {ENV_PATH.name}.")
 
 
 def derive_tenant_label_from_domains(domains: set[str]) -> str | None:
@@ -155,11 +259,12 @@ spinner = Spinner("Loading configuration")
 atexit.register(spinner.stop)
 spinner.start()
 
+ensure_local_credentials()
 load_dotenv()
 
 client_id = os.environ["FALCON_CLIENT_ID"]
 client_secret = os.environ["FALCON_CLIENT_SECRET"]
-base_url = os.environ.get("FALCON_BASE_URL", "https://api.crowdstrike.com")
+base_url = os.environ.get("FALCON_BASE_URL", DEFAULT_BASE_URL)
 current_timestamp = datetime.now(timezone.utc).strftime("%d.%m.%Y %H:%M:%S %Z")
 
 auth = dict(client_id=client_id, client_secret=client_secret, base_url=base_url)

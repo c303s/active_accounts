@@ -31,6 +31,23 @@ Minimum API permissions:
 - Python 3.10 or newer
 - A CrowdStrike Falcon API client with the required scopes
 
+## One-Command Install
+
+Download, install, and set up the script with a single command:
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/c303s/crowdstrike-falcon-tenant-report/main/install.sh)"
+```
+
+The installer will:
+
+- download the latest version of the repository into `~/.crowdstrike-falcon-tenant-report`
+- create a local virtual environment
+- install the Python dependencies
+- ask for `FALCON_CLIENT_ID` and `FALCON_CLIENT_SECRET` if they are not already available
+- store those credentials in a local `.env` file with restricted file permissions
+- create a launcher at `~/.local/bin/crowdstrike-falcon-tenant-report`
+
 Install dependencies:
 
 ```bash
@@ -42,6 +59,8 @@ pip install -r requirements.txt
 ## Configuration
 
 Create a local `.env` file based on `.env.example`.
+
+If the script does not find `FALCON_CLIENT_ID` or `FALCON_CLIENT_SECRET`, it starts an interactive setup wizard and writes them to a local `.env` file automatically.
 
 Required variables:
 
