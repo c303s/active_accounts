@@ -256,14 +256,18 @@ def build_endpoint_chart(domain_rows: list[dict[str, int | str]]) -> Drawing:
     drawing.add(Rect(0, 0, 500, 260, fillColor=colors.white, strokeColor=CROWDSTRIKE_GRAY))
     drawing.add(String(18, 232, "Endpoints by Domain", fontName="Helvetica-Bold", fontSize=14, fillColor=CROWDSTRIKE_BLACK))
 
-    top_domains = domain_rows[:6]
+    top_domains = sorted(
+        domain_rows,
+        key=lambda row: (-int(row["endpoints"]), -int(row["total"]), str(row["domain"]).lower()),
+    )[:6]
+    chart_domains = list(reversed(top_domains))
     bar_chart = HorizontalBarChart()
     bar_chart.x = 165
     bar_chart.y = 34
     bar_chart.width = 300
     bar_chart.height = 160
-    bar_chart.data = [[int(row["endpoints"]) for row in top_domains] or [0]]
-    bar_chart.categoryAxis.categoryNames = [str(row["domain"])[:28] for row in top_domains] or ["No domains"]
+    bar_chart.data = [[int(row["endpoints"]) for row in chart_domains] or [0]]
+    bar_chart.categoryAxis.categoryNames = [str(row["domain"])[:28] for row in chart_domains] or ["No domains"]
     bar_chart.categoryAxis.labels.boxAnchor = "e"
     bar_chart.categoryAxis.labels.dx = -10
     bar_chart.categoryAxis.labels.fontName = "Helvetica"
@@ -825,7 +829,9 @@ for domain in active_directory_domains:
         }
     )
 
-domain_rows.sort(key=lambda row: (-int(row["total"]), str(row["domain"]).lower()))
+domain_rows.sort(
+    key=lambda row: (-int(row["endpoints"]), -int(row["total"]), str(row["domain"]).lower())
+)
 
 for row in domain_rows:
     print(
