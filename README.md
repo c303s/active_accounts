@@ -49,11 +49,6 @@ Required variables:
 - `FALCON_CLIENT_SECRET`
 - `FALCON_BASE_URL`
 
-Optional variables:
-
-- `FALCON_TENANT_NAME`
-- `FALCON_CID`
-
 Common Falcon base URLs:
 
 - `https://api.crowdstrike.com`
@@ -92,10 +87,10 @@ Identity Protection accounts used in the last 90 days
   Total active accounts  : 7398 (81.56% human)
 
 Active Directory domains : 2
-  - aunde.local | Endpoints: 4210 | Total: 4822 | Human: 4010 | Service: 622 | Admin: 190
-  - airventmain.local | Endpoints: 2088 | Total: 2576 | Human: 2024 | Service: 411 | Admin: 141
+  - acme.local | Endpoints: 4210 | Total: 4822 | Human: 4010 | Service: 622 | Admin: 190
+  - acme-main.local | Endpoints: 2088 | Total: 2576 | Human: 2024 | Service: 411 | Admin: 141
 
-CSV output             : AUNDE-Group-SE-0123456789ABCDEF0123456789ABCDEF-08-05-2026.csv
+CSV output             : ACME-Group-0123456789ABCDEF0123456789ABCDEF-08-05-2026.csv
 ```
 
 ## Notes
