@@ -44,6 +44,14 @@ def derive_tenant_label_from_domains(domains: set[str]) -> str | None:
     return fallback_label
 
 
+def normalize_domain(domain: str | None) -> str | None:
+    if not domain:
+        return None
+
+    normalized = domain.strip().lower().rstrip(".")
+    return normalized or None
+
+
 def resolve_tenant_label(identity_protection: IdentityProtection) -> str | None:
     domains_response = identity_protection.graphql(query="query { domains }")
     if domains_response["status_code"] != 200:
@@ -164,6 +172,7 @@ spinner.update("Counting protected endpoints")
 hosts = Hosts(**auth)
 
 total_endpoints = 0
+endpoint_domain_counts = {}
 cursor = None
 cursor_param = None
 expected_total = None
@@ -181,6 +190,28 @@ while True:
 
     resources = response["body"].get("resources", [])
     total_endpoints += len(resources)
+
+    device_ids = []
+    for resource in resources:
+        if isinstance(resource, str):
+            device_ids.append(resource)
+        elif isinstance(resource, dict) and resource.get("device_id"):
+            device_ids.append(resource["device_id"])
+
+    if device_ids:
+        details_response = hosts.get_device_details(ids=device_ids)
+        if details_response["status_code"] != 200:
+            errors = details_response.get("body", {}).get("errors", [])
+            raise RuntimeError(
+                f"Hosts details API error {details_response['status_code']}: {errors}"
+            )
+
+        detail_resources = details_response.get("body", {}).get("resources", [])
+        for endpoint in detail_resources:
+            domain = normalize_domain(endpoint.get("machine_domain"))
+            if not domain:
+                domain = "Unspecified"
+            endpoint_domain_counts[domain] = endpoint_domain_counts.get(domain, 0) + 1
 
     pagination = response["body"].get("meta", {}).get("pagination", {})
     total = pagination.get("total")
@@ -236,7 +267,6 @@ query {{
   )
 }}
 '''
-spinner.update("Counting active user accounts")
 spinner.update("Counting active accounts")
 total_response = identity_protection.graphql(query=total_query)
 if total_response["status_code"] != 200:
@@ -378,8 +408,10 @@ print(f"Active Directory domains : {len(active_directory_domains)}")
 for domain in sorted(active_directory_domains):
     domain_counts = domain_account_breakdown[domain]
     domain_total = domain_counts["human"] + domain_counts["service"] + domain_counts["admin"]
+    endpoint_count = endpoint_domain_counts.get(normalize_domain(domain), 0)
     print(
         f"  - {domain} | "
+        f"Endpoints: {endpoint_count} | "
         f"Total: {domain_total} | "
         f"Human: {domain_counts['human']} | "
         f"Service: {domain_counts['service']} | "

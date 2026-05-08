@@ -4,6 +4,7 @@ This repository contains a small Python script that connects to CrowdStrike Falc
 
 - the tenant label and CID
 - the number of endpoints with an installed Falcon sensor
+- an endpoint-per-domain summary based on host machine domains
 - the number of active Identity Protection accounts seen in the last 90 days
 - a human, service, and admin split for those active identities
 - the Active Directory domains represented by those identities
@@ -88,6 +89,10 @@ Identity Protection accounts used in the last 90 days
   Service accounts       : 1032
   Admin accounts         : 332
   Total active accounts  : 7398 (81.56% human)
+
+Active Directory domains : 2
+  - aunde.local | Endpoints: 4210 | Total: 4822 | Human: 4010 | Service: 622 | Admin: 190
+  - airventmain.local | Endpoints: 2088 | Total: 2576 | Human: 2024 | Service: 411 | Admin: 141
 ```
 
 ## Notes
