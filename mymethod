@@ -1,0 +1,54 @@
+Procedure used to verify the CrowdStrike counts
+
+1. Endpoint count
+- Use Falcon Hosts API.
+- Call query_devices_by_filter_scroll with pagination.
+- Count returned device IDs.
+- This produced the correct endpoint count for the active credential set.
+
+2. Why Discover was rejected
+- Falcon Discover account APIs did not match the Identity Protection UI metric.
+- Discover returns observed account records and different counting behavior.
+- Even with correct pagination, Discover totals did not align with the target Identity Protection numbers.
+
+3. Correct source for account verification
+- Use Identity Protection GraphQL through FalconPy IdentityProtection.graphql.
+- The required permission must be present on the API client.
+- Without this scope, the API returns 403 access denied, scope not permitted.
+
+4. Verified total for this data source
+- The total of 95 was verified directly from Identity Protection GraphQL.
+- Query logic:
+  countEntities(
+    types: [USER],
+    archived: false,
+    mostRecentActivityStartTime: <now minus 90 days>
+  )
+- This source produced the verified total 95.
+
+5. Verified category logic for this data source
+- Programmatic accounts:
+  entities in the verified 95-set that have ProgrammaticUserAccountRole and at least one enabled, non-archived backing account.
+- Unclassified accounts:
+  entities in the verified 95-set that are neither HumanUserAccountRole nor ProgrammaticUserAccountRole.
+- Human accounts:
+  verified total minus programmatic minus unclassified.
+- Regular accounts:
+  none for this source.
+- Admin accounts:
+  not reported separately in the final verified method for this source, because admin-role overlap exists with human and programmatic roles and would double-count.
+
+6. Verified result for the current source
+- Human accounts: 81
+- Programmatic accounts: 13
+- Unclassified accounts: 1
+- Regular accounts: 0
+- Total: 95
+
+7. Important caveat
+- These results are source-specific.
+- Different credentials can point to a different CrowdStrike tenant or data source and produce different numbers.
+- The procedure should always be verified against the active credential set in .env.
+
+8. Implementation note
+- The current script sensor_count.py follows this Identity Protection method for the active source.
