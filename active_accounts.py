@@ -13,6 +13,15 @@ from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from falconpy import Hosts, IdentityProtection, SensorDownload
+from reportlab.graphics.charts.barcharts import VerticalBarChart
+from reportlab.graphics.charts.legends import Legend
+from reportlab.graphics.charts.piecharts import Pie
+from reportlab.graphics.shapes import Drawing, Rect, String
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import mm
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 
 TENANT_DISPLAY_NAMES = {
@@ -24,6 +33,11 @@ DEFAULT_BASE_URL = "https://api.eu-1.crowdstrike.com"
 ENV_PATH = Path(__file__).with_name(".env")
 SCRIPT_PATH = Path(__file__).name
 LAUNCHER_PATH = Path(__file__).with_name("crowdstrike-falcon-tenant-report")
+CROWDSTRIKE_RED = colors.HexColor("#E01E26")
+CROWDSTRIKE_BLACK = colors.HexColor("#1A1A1A")
+CROWDSTRIKE_DARK = colors.HexColor("#252525")
+CROWDSTRIKE_LIGHT = colors.HexColor("#F5F5F5")
+CROWDSTRIKE_GRAY = colors.HexColor("#D9D9D9")
 
 
 def read_env_file(path: Path) -> dict[str, str]:
@@ -185,6 +199,187 @@ def sanitize_filename_component(value: str) -> str:
             sanitized.append("-")
     collapsed = "".join(sanitized).strip("-")
     return collapsed or "unknown"
+
+
+def build_pdf_chart(account_counts: dict[str, int], domain_rows: list[dict[str, int | str]]) -> Drawing:
+    drawing = Drawing(520, 380)
+    drawing.add(Rect(0, 0, 520, 380, fillColor=CROWDSTRIKE_LIGHT, strokeColor=CROWDSTRIKE_GRAY))
+    drawing.add(String(18, 352, "Identity Distribution", fontName="Helvetica-Bold", fontSize=15, fillColor=CROWDSTRIKE_BLACK))
+
+    pie = Pie()
+    pie.x = 25
+    pie.y = 180
+    pie.width = 180
+    pie.height = 150
+    pie.data = [
+        account_counts["human"],
+        account_counts["service"],
+        account_counts["admin"],
+    ]
+    pie.labels = ["Human", "Service", "Admin"]
+    pie.slices[0].fillColor = CROWDSTRIKE_RED
+    pie.slices[1].fillColor = colors.HexColor("#555555")
+    pie.slices[2].fillColor = colors.HexColor("#9C9C9C")
+    pie.slices.strokeColor = colors.white
+    pie.sideLabels = True
+    drawing.add(pie)
+
+    legend = Legend()
+    legend.x = 210
+    legend.y = 290
+    legend.colorNamePairs = [
+        (CROWDSTRIKE_RED, "Human"),
+        (colors.HexColor("#555555"), "Service"),
+        (colors.HexColor("#9C9C9C"), "Admin"),
+    ]
+    legend.fontName = "Helvetica"
+    legend.fontSize = 10
+    drawing.add(legend)
+
+    drawing.add(String(18, 160, "Endpoints by Domain", fontName="Helvetica-Bold", fontSize=15, fillColor=CROWDSTRIKE_BLACK))
+
+    top_domains = sorted(domain_rows, key=lambda row: int(row["endpoints"]), reverse=True)[:6]
+    bar_chart = VerticalBarChart()
+    bar_chart.x = 230
+    bar_chart.y = 45
+    bar_chart.width = 255
+    bar_chart.height = 220
+    bar_chart.data = [[int(row["endpoints"]) for row in top_domains] or [0]]
+    bar_chart.categoryAxis.categoryNames = [str(row["domain"]) for row in top_domains] or ["No domains"]
+    bar_chart.categoryAxis.labels.boxAnchor = "ne"
+    bar_chart.categoryAxis.labels.angle = 20
+    bar_chart.categoryAxis.labels.fontName = "Helvetica"
+    bar_chart.categoryAxis.labels.fontSize = 8
+    bar_chart.valueAxis.labels.fontName = "Helvetica"
+    bar_chart.valueAxis.labels.fontSize = 8
+    bar_chart.valueAxis.strokeColor = CROWDSTRIKE_GRAY
+    bar_chart.categoryAxis.strokeColor = CROWDSTRIKE_GRAY
+    bar_chart.bars[0].fillColor = CROWDSTRIKE_RED
+    bar_chart.bars[0].strokeColor = CROWDSTRIKE_RED
+    bar_chart.barSpacing = 12
+    drawing.add(bar_chart)
+
+    return drawing
+
+
+def write_pdf_report(
+    pdf_path: str,
+    tenant_label: str,
+    cid_value: str,
+    current_timestamp: str,
+    total_endpoints: int,
+    category_counts: dict[str, int],
+    total_active_accounts: int,
+    human_percentage: float,
+    domain_rows: list[dict[str, int | str]],
+) -> None:
+    doc = SimpleDocTemplate(
+        pdf_path,
+        pagesize=A4,
+        leftMargin=16 * mm,
+        rightMargin=16 * mm,
+        topMargin=16 * mm,
+        bottomMargin=16 * mm,
+    )
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        "CrowdStrikeTitle",
+        parent=styles["Title"],
+        fontName="Helvetica-Bold",
+        fontSize=20,
+        textColor=CROWDSTRIKE_RED,
+        spaceAfter=8,
+    )
+    subtitle_style = ParagraphStyle(
+        "CrowdStrikeSubtitle",
+        parent=styles["BodyText"],
+        fontName="Helvetica",
+        fontSize=10,
+        textColor=CROWDSTRIKE_DARK,
+        spaceAfter=8,
+    )
+    heading_style = ParagraphStyle(
+        "CrowdStrikeHeading",
+        parent=styles["Heading2"],
+        fontName="Helvetica-Bold",
+        fontSize=12,
+        textColor=CROWDSTRIKE_BLACK,
+        spaceBefore=10,
+        spaceAfter=6,
+    )
+
+    story = [
+        Paragraph("CrowdStrike Falcon Tenant Report", title_style),
+        Paragraph(f"Tenant: {tenant_label} | CID: {cid_value} | Generated: {current_timestamp}", subtitle_style),
+    ]
+
+    summary_table = Table(
+        [
+            ["Protected endpoints", f"{total_endpoints}"],
+            ["Human accounts", f"{category_counts['human']}"],
+            ["Service accounts", f"{category_counts['service']}"],
+            ["Admin accounts", f"{category_counts['admin']}"],
+            ["Total active accounts", f"{total_active_accounts} ({human_percentage:.2f}% human)"],
+        ],
+        colWidths=[60 * mm, 110 * mm],
+    )
+    summary_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), colors.white),
+                ("BOX", (0, 0), (-1, -1), 1, CROWDSTRIKE_GRAY),
+                ("INNERGRID", (0, 0), (-1, -1), 0.5, CROWDSTRIKE_GRAY),
+                ("BACKGROUND", (0, 0), (0, -1), CROWDSTRIKE_BLACK),
+                ("TEXTCOLOR", (0, 0), (0, -1), colors.white),
+                ("TEXTCOLOR", (1, 0), (1, -1), CROWDSTRIKE_BLACK),
+                ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, -1), 10),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (-1, -1), 8),
+            ]
+        )
+    )
+
+    story.append(summary_table)
+    story.append(Spacer(1, 10))
+    story.append(build_pdf_chart(category_counts, domain_rows))
+    story.append(Spacer(1, 10))
+    story.append(Paragraph("Active Directory Domains", heading_style))
+
+    domain_table_data = [["Domain", "Endpoints", "Total", "Human", "Service", "Admin"]]
+    for row in domain_rows:
+        domain_table_data.append(
+            [
+                str(row["domain"]),
+                str(row["endpoints"]),
+                str(row["total"]),
+                str(row["human"]),
+                str(row["service"]),
+                str(row["admin"]),
+            ]
+        )
+
+    domain_table = Table(domain_table_data, colWidths=[58 * mm, 20 * mm, 20 * mm, 20 * mm, 22 * mm, 18 * mm])
+    domain_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), CROWDSTRIKE_RED),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, CROWDSTRIKE_LIGHT]),
+                ("BOX", (0, 0), (-1, -1), 1, CROWDSTRIKE_GRAY),
+                ("INNERGRID", (0, 0), (-1, -1), 0.5, CROWDSTRIKE_GRAY),
+                ("ALIGN", (1, 1), (-1, -1), "CENTER"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ]
+        )
+    )
+    story.append(domain_table)
+    doc.build(story)
 
 
 def resolve_tenant_label(identity_protection: IdentityProtection) -> str | None:
@@ -529,6 +724,7 @@ csv_filename = (
     f"{sanitize_filename_component(cid_value)}-"
     f"{datetime.now(timezone.utc).strftime('%d-%m-%Y')}.csv"
 )
+pdf_filename = csv_filename.removesuffix(".csv") + ".pdf"
 
 spinner.update("Preparing report")
 spinner.stop()
@@ -547,10 +743,21 @@ print(f"  Admin accounts         : {category_counts['admin']}")
 print(f"  Total active accounts  : {total_active_accounts} ({human_percentage:.2f}% human)")
 print()
 print(f"Active Directory domains : {len(active_directory_domains)}")
+domain_rows = []
 for domain in sorted(active_directory_domains):
     domain_counts = domain_account_breakdown[domain]
     domain_total = domain_counts["human"] + domain_counts["service"] + domain_counts["admin"]
     endpoint_count = endpoint_domain_counts.get(normalize_domain(domain), 0)
+    domain_rows.append(
+        {
+            "domain": domain,
+            "endpoints": endpoint_count,
+            "total": domain_total,
+            "human": domain_counts["human"],
+            "service": domain_counts["service"],
+            "admin": domain_counts["admin"],
+        }
+    )
     print(
         f"  - {domain} | "
         f"Endpoints: {endpoint_count} | "
@@ -573,23 +780,33 @@ with open(csv_filename, "w", newline="", encoding="utf-8") as csv_file:
     writer.writerow(["summary", "total_active_accounts", total_active_accounts, "", "", "", "", "", ""])
     writer.writerow(["summary", "human_percentage", f"{human_percentage:.2f}", "", "", "", "", "", ""])
 
-    for domain in sorted(active_directory_domains):
-        domain_counts = domain_account_breakdown[domain]
-        domain_total = domain_counts["human"] + domain_counts["service"] + domain_counts["admin"]
-        endpoint_count = endpoint_domain_counts.get(normalize_domain(domain), 0)
+    for row in domain_rows:
         writer.writerow(
             [
                 "active_directory_domain",
                 "domain_breakdown",
                 "",
-                domain,
-                endpoint_count,
-                domain_total,
-                domain_counts["human"],
-                domain_counts["service"],
-                domain_counts["admin"],
+                row["domain"],
+                row["endpoints"],
+                row["total"],
+                row["human"],
+                row["service"],
+                row["admin"],
             ]
         )
 
+write_pdf_report(
+    pdf_filename,
+    tenant_label,
+    cid_value,
+    current_timestamp,
+    total_endpoints,
+    category_counts,
+    total_active_accounts,
+    human_percentage,
+    domain_rows,
+)
+
 print()
 print(f"CSV output             : {csv_filename}")
+print(f"PDF output             : {pdf_filename}")

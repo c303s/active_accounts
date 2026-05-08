@@ -9,6 +9,7 @@ This repository contains a small Python script that connects to CrowdStrike Falc
 - a human, service, and admin split for those active identities
 - the Active Directory domains represented by those identities
 - a CSV export of the full report written after the terminal output completes
+- a PDF export with charts and CrowdStrike-themed styling
 
 The main script is `active_accounts.py`.
 
@@ -112,6 +113,7 @@ Active Directory domains : 2
   - acme-main.local | Endpoints: 2088 | Total: 2576 | Human: 2024 | Service: 411 | Admin: 141
 
 CSV output             : ACME-Group-0123456789ABCDEF0123456789ABCDEF-08-05-2026.csv
+PDF output             : ACME-Group-0123456789ABCDEF0123456789ABCDEF-08-05-2026.pdf
 ```
 
 ## Notes
@@ -120,6 +122,7 @@ CSV output             : ACME-Group-0123456789ABCDEF0123456789ABCDEF-08-05-2026.
 - The script verifies Identity Protection GraphQL access before running the more expensive queries.
 - Some API clients do not expose a tenant display name directly. In that case, the script tries to derive a tenant label from the discovered Active Directory domains before falling back to the Falcon base URL host name, unless `FALCON_TENANT_NAME` is set.
 - The CSV export file name uses the structure `tenant-cid-dd-mm-yyyy.csv` and is written in the current working directory.
+- The PDF export uses the same base file name and adds a CrowdStrike-styled summary page with charts and a domain table.
 - Do not commit real credentials to GitHub.
 
 ## Publish To GitHub
