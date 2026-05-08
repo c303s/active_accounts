@@ -30,7 +30,7 @@ prompt_value() {
             else
                 read -r -s -p "$prompt_text: " value
             fi
-            echo
+            printf '\n' >&2
         else
             if [[ -n "$default_value" ]]; then
                 read -r -p "$prompt_text [$default_value]: " value
