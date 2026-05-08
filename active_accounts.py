@@ -250,7 +250,7 @@ def build_endpoint_chart(domain_rows: list[dict[str, int | str]]) -> Drawing:
     drawing.add(Rect(0, 0, 500, 260, fillColor=colors.white, strokeColor=CROWDSTRIKE_GRAY))
     drawing.add(String(18, 232, "Endpoints by Domain", fontName="Helvetica-Bold", fontSize=14, fillColor=CROWDSTRIKE_BLACK))
 
-    top_domains = sorted(domain_rows, key=lambda row: int(row["endpoints"]), reverse=True)[:6]
+    top_domains = domain_rows[:6]
     bar_chart = HorizontalBarChart()
     bar_chart.x = 165
     bar_chart.y = 34
@@ -337,7 +337,7 @@ def write_pdf_report(
 
     header_right = ""
     if LOGO_PATH.exists():
-        header_right = Image(str(LOGO_PATH), width=46 * mm, height=16 * mm)
+        header_right = Image(str(LOGO_PATH), width=46 * mm, height=16 * mm, kind="proportional")
     else:
         header_right = Table(
             [[Paragraph("CROWDSTRIKE", ParagraphStyle("HeaderBadge", parent=small_style, fontName="Helvetica-Bold", fontSize=12, textColor=colors.white, alignment=1))]],
@@ -803,7 +803,7 @@ print(f"  Total active accounts  : {total_active_accounts} ({human_percentage:.2
 print()
 print(f"Active Directory domains : {len(active_directory_domains)}")
 domain_rows = []
-for domain in sorted(active_directory_domains):
+for domain in active_directory_domains:
     domain_counts = domain_account_breakdown[domain]
     domain_total = domain_counts["human"] + domain_counts["service"] + domain_counts["admin"]
     endpoint_count = endpoint_domain_counts.get(normalize_domain(domain), 0)
@@ -817,13 +817,17 @@ for domain in sorted(active_directory_domains):
             "admin": domain_counts["admin"],
         }
     )
+
+domain_rows.sort(key=lambda row: (-int(row["total"]), str(row["domain"]).lower()))
+
+for row in domain_rows:
     print(
-        f"  - {domain} | "
-        f"Endpoints: {endpoint_count} | "
-        f"Total: {domain_total} | "
-        f"Human: {domain_counts['human']} | "
-        f"Service: {domain_counts['service']} | "
-        f"Admin: {domain_counts['admin']}"
+        f"  - {row['domain']} | "
+        f"Endpoints: {row['endpoints']} | "
+        f"Total: {row['total']} | "
+        f"Human: {row['human']} | "
+        f"Service: {row['service']} | "
+        f"Admin: {row['admin']}"
     )
 
 with open(csv_filename, "w", newline="", encoding="utf-8") as csv_file:
