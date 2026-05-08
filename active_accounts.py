@@ -371,10 +371,13 @@ def write_pdf_report(
                 ("BACKGROUND", (0, 0), (-1, -1), CROWDSTRIKE_PALE),
                 ("BOX", (0, 0), (-1, -1), 0.8, CROWDSTRIKE_GRAY),
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 10),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+                ("LEFTPADDING", (0, 0), (0, -1), 10),
+                ("RIGHTPADDING", (0, 0), (0, -1), 10),
+                ("LEFTPADDING", (1, 0), (1, -1), 2),
+                ("RIGHTPADDING", (1, 0), (1, -1), 10),
                 ("TOPPADDING", (0, 0), (-1, -1), 10),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+                ("ALIGN", (1, 0), (1, -1), "LEFT"),
             ]
         )
     )
@@ -829,9 +832,7 @@ for domain in active_directory_domains:
         }
     )
 
-domain_rows.sort(
-    key=lambda row: (-int(row["endpoints"]), -int(row["total"]), str(row["domain"]).lower())
-)
+domain_rows.sort(key=lambda row: str(row["domain"]).lower())
 
 for row in domain_rows:
     print(
