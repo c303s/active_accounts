@@ -2,6 +2,7 @@ import os
 import sys
 import atexit
 import json
+import csv
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -50,6 +51,17 @@ def normalize_domain(domain: str | None) -> str | None:
 
     normalized = domain.strip().lower().rstrip(".")
     return normalized or None
+
+
+def sanitize_filename_component(value: str) -> str:
+    sanitized = []
+    for char in value.strip():
+        if char.isalnum() or char in {"-", "_"}:
+            sanitized.append(char)
+        elif char.isspace():
+            sanitized.append("-")
+    collapsed = "".join(sanitized).strip("-")
+    return collapsed or "unknown"
 
 
 def resolve_tenant_label(identity_protection: IdentityProtection) -> str | None:
@@ -388,6 +400,12 @@ if not tenant_label:
 
 # Output
 
+csv_filename = (
+    f"{sanitize_filename_component(tenant_label)}-"
+    f"{sanitize_filename_component(cid_value)}-"
+    f"{datetime.now(timezone.utc).strftime('%d-%m-%Y')}.csv"
+)
+
 spinner.update("Preparing report")
 spinner.stop()
 clear_screen()
@@ -417,3 +435,37 @@ for domain in sorted(active_directory_domains):
         f"Service: {domain_counts['service']} | "
         f"Admin: {domain_counts['admin']}"
     )
+
+with open(csv_filename, "w", newline="", encoding="utf-8") as csv_file:
+    writer = csv.writer(csv_file)
+    writer.writerow(["section", "label", "value", "domain", "endpoints", "total", "human", "service", "admin"])
+    writer.writerow(["summary", "tenant", tenant_label, "", "", "", "", "", ""])
+    writer.writerow(["summary", "cid", cid_value, "", "", "", "", "", ""])
+    writer.writerow(["summary", "current_date_time", current_timestamp, "", "", "", "", "", ""])
+    writer.writerow(["summary", "protected_endpoints", total_endpoints, "", "", "", "", "", ""])
+    writer.writerow(["summary", "human_accounts", category_counts["human"], "", "", "", "", "", ""])
+    writer.writerow(["summary", "service_accounts", category_counts["service"], "", "", "", "", "", ""])
+    writer.writerow(["summary", "admin_accounts", category_counts["admin"], "", "", "", "", "", ""])
+    writer.writerow(["summary", "total_active_accounts", total_active_accounts, "", "", "", "", "", ""])
+    writer.writerow(["summary", "human_percentage", f"{human_percentage:.2f}", "", "", "", "", "", ""])
+
+    for domain in sorted(active_directory_domains):
+        domain_counts = domain_account_breakdown[domain]
+        domain_total = domain_counts["human"] + domain_counts["service"] + domain_counts["admin"]
+        endpoint_count = endpoint_domain_counts.get(normalize_domain(domain), 0)
+        writer.writerow(
+            [
+                "active_directory_domain",
+                "domain_breakdown",
+                "",
+                domain,
+                endpoint_count,
+                domain_total,
+                domain_counts["human"],
+                domain_counts["service"],
+                domain_counts["admin"],
+            ]
+        )
+
+print()
+print(f"CSV output             : {csv_filename}")

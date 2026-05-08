@@ -8,6 +8,7 @@ This repository contains a small Python script that connects to CrowdStrike Falc
 - the number of active Identity Protection accounts seen in the last 90 days
 - a human, service, and admin split for those active identities
 - the Active Directory domains represented by those identities
+- a CSV export of the full report written after the terminal output completes
 
 The main script is `active_accounts.py`.
 
@@ -93,6 +94,8 @@ Identity Protection accounts used in the last 90 days
 Active Directory domains : 2
   - aunde.local | Endpoints: 4210 | Total: 4822 | Human: 4010 | Service: 622 | Admin: 190
   - airventmain.local | Endpoints: 2088 | Total: 2576 | Human: 2024 | Service: 411 | Admin: 141
+
+CSV output             : AUNDE-Group-SE-0123456789ABCDEF0123456789ABCDEF-08-05-2026.csv
 ```
 
 ## Notes
@@ -100,6 +103,7 @@ Active Directory domains : 2
 - The endpoint count is paginated and follows the cursor returned by the Hosts API.
 - The script verifies Identity Protection GraphQL access before running the more expensive queries.
 - Some API clients do not expose a tenant display name directly. In that case, the script tries to derive a tenant label from the discovered Active Directory domains before falling back to the Falcon base URL host name, unless `FALCON_TENANT_NAME` is set.
+- The CSV export file name uses the structure `tenant-cid-dd-mm-yyyy.csv` and is written in the current working directory.
 - Do not commit real credentials to GitHub.
 
 ## Publish To GitHub
