@@ -1287,5 +1287,5 @@ write_pdf_report(
 )
 
 print()
-print(f"CSV output             : {csv_filename}")
-print(f"PDF output             : {pdf_filename}")
+print(f".csv file              : {csv_filename}")
+print(f".pdf file              : {pdf_filename}")
