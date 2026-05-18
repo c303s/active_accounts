@@ -300,7 +300,15 @@ def ensure_local_credentials() -> None:
         print(f"  FALCON_CLIENT_SECRET = {'*' * 8} (hidden)")
         print(f"  FALCON_BASE_URL   = {base_url}")
         if not _prompt_yes_no("Update these credentials?", default=False):
-            return
+            ok, message = _preflight_credentials(client_id, client_secret, base_url)
+            if ok:
+                print("Running pre-flight check: successful.")
+                return
+
+            print("Running pre-flight check: failed.")
+            print(message)
+            print("The saved credentials or required API access are not valid yet. Please enter valid credentials.")
+            print()
     else:
         if not interactive:
             raise RuntimeError(
