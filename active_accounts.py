@@ -2,8 +2,8 @@ import os
 import sys
 
 _REQUIRED_PYTHON = (3, 10)
-_DEPENDENCIES = ("crowdstrike-falconpy", "reportlab")
-_IMPORT_PROBES = ("falconpy", "reportlab")
+_DEPENDENCIES = ("requests", "reportlab")
+_IMPORT_PROBES = ("requests", "reportlab")
 
 
 def _bootstrap() -> None:
@@ -90,7 +90,7 @@ from itertools import cycle
 from pathlib import Path
 from urllib.parse import urlparse
 
-from falconpy import Hosts, IdentityProtection, SensorDownload
+import requests
 from reportlab.graphics.charts.barcharts import HorizontalBarChart
 from reportlab.graphics.charts.legends import Legend
 from reportlab.graphics.charts.piecharts import Pie
@@ -576,7 +576,7 @@ def write_pdf_report(
     doc.build(story)
 
 
-def resolve_tenant_label(identity_protection: IdentityProtection) -> str | None:
+def resolve_tenant_label(identity_protection: "FalconAPI") -> str | None:
     domains_response = identity_protection.graphql(query="query { domains }")
     if domains_response["status_code"] != 200:
         return None
@@ -611,6 +611,76 @@ def resolve_tenant_label(identity_protection: IdentityProtection) -> str | None:
 def clear_screen() -> None:
     if sys.stdout.isatty():
         os.system("cls" if os.name == "nt" else "clear")
+
+
+class FalconAPI:
+    """Minimal CrowdStrike Falcon REST client (replaces falconpy)."""
+
+    def __init__(self, client_id: str, client_secret: str, base_url: str) -> None:
+        self.base_url = base_url.rstrip("/")
+        self._client_id = client_id
+        self._client_secret = client_secret
+        self._token: str | None = None
+        self._token_expiry: float = 0.0
+
+    def _authenticate(self) -> None:
+        resp = requests.post(
+            f"{self.base_url}/oauth2/token",
+            data={"client_id": self._client_id, "client_secret": self._client_secret},
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=30,
+        )
+        try:
+            body = resp.json() if resp.content else {}
+        except ValueError:
+            body = {}
+        if resp.status_code not in (200, 201) or "access_token" not in body:
+            errors = body.get("errors") or [{"message": resp.text[:200]}]
+            raise RuntimeError(f"OAuth2 token error {resp.status_code}: {errors}")
+        self._token = body["access_token"]
+        self._token_expiry = time.time() + int(body.get("expires_in", 1800)) - 60
+
+    def _auth_header(self) -> dict[str, str]:
+        if not self._token or time.time() >= self._token_expiry:
+            self._authenticate()
+        return {"Authorization": f"Bearer {self._token}"}
+
+    def _request(self, method: str, path: str, *, params=None, json_body=None) -> dict:
+        headers = self._auth_header()
+        if json_body is not None:
+            headers["Content-Type"] = "application/json"
+        resp = requests.request(
+            method,
+            f"{self.base_url}{path}",
+            headers=headers,
+            params=params,
+            json=json_body,
+            timeout=60,
+        )
+        try:
+            body = resp.json() if resp.content else {}
+        except ValueError:
+            body = {"raw": resp.text}
+        return {"status_code": resp.status_code, "headers": dict(resp.headers), "body": body}
+
+    # SensorDownload
+    def get_sensor_installer_ccid(self) -> dict:
+        return self._request("GET", "/sensors/queries/installers/ccid/v1")
+
+    # Hosts
+    def query_devices_by_filter_scroll(self, **params) -> dict:
+        return self._request("GET", "/devices/queries/devices-scroll/v1", params=params)
+
+    def get_device_details(self, ids: list[str]) -> dict:
+        return self._request("POST", "/devices/entities/devices/v2", json_body={"ids": ids})
+
+    # IdentityProtection
+    def graphql(self, query: str) -> dict:
+        return self._request(
+            "POST",
+            "/identity-protection/combined/graphql/v1",
+            json_body={"query": query},
+        )
 
 
 class Spinner:
@@ -695,8 +765,10 @@ auth = dict(client_id=client_id, client_secret=client_secret, base_url=base_url)
 tenant_label = os.environ.get("FALCON_TENANT_NAME")
 cid_value = os.environ.get("FALCON_CID", "Unavailable")
 
+falcon_api = FalconAPI(**auth)
+
 spinner.update("Fetching tenant CID")
-sensor_download = SensorDownload(**auth)
+sensor_download = falcon_api
 cid_response = sensor_download.get_sensor_installer_ccid()
 if cid_response["status_code"] == 200:
     cid_resources = cid_response.get("body", {}).get("resources", [])
@@ -709,7 +781,7 @@ if cid_value != "Unavailable":
 # 1. Sensor-installed endpoint count
 
 spinner.update("Counting protected endpoints")
-hosts = Hosts(**auth)
+hosts = falcon_api
 
 total_endpoints = 0
 endpoint_domain_counts = {}
@@ -782,7 +854,7 @@ while True:
 # 2. Active accounts in the last 90 days (Identity Protection)
 
 spinner.update("Connecting to Identity Protection")
-identity_protection = IdentityProtection(**auth)
+identity_protection = falcon_api
 cutoff = datetime.now(timezone.utc) - timedelta(days=90)
 cutoff_str = cutoff.strftime("%Y-%m-%dT%H:%M:%SZ")
 

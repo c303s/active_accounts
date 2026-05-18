@@ -17,11 +17,11 @@ Current version: `0.01`
 
 ## What The Script Uses
 
-The script uses these Falcon APIs through FalconPy:
+The script calls these Falcon REST APIs directly (via `requests`, no SDK):
 
-- Hosts
-- Sensor Download
-- Identity Protection GraphQL
+- Hosts (`/devices/queries/devices-scroll/v1`, `/devices/entities/devices/v2`)
+- Sensor Download (`/sensors/queries/installers/ccid/v1`)
+- Identity Protection GraphQL (`/identity-protection/combined/graphql/v1`)
 
 Minimum API permissions:
 
