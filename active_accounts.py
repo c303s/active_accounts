@@ -1295,5 +1295,7 @@ write_pdf_report(
 )
 
 print()
-print(f".csv file              : {csv_filename}")
-print(f".pdf file              : {pdf_filename}")
+print(f"Writing .csv file      : {csv_filename}")
+print(f"Writing .pdf file      : {pdf_filename}")
+print()
+print("Thanks for using CrowdStrike Falcon Tenant Report.")
