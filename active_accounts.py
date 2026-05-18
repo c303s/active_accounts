@@ -627,12 +627,12 @@ class Spinner:
 
 
 clear_screen()
+ensure_local_credentials()
+load_dotenv()
+
 spinner = Spinner("Loading configuration")
 atexit.register(spinner.stop)
 spinner.start()
-
-ensure_local_credentials()
-load_dotenv()
 
 client_id = os.environ["FALCON_CLIENT_ID"]
 client_secret = os.environ["FALCON_CLIENT_SECRET"]
