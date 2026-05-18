@@ -17,11 +17,13 @@ Current version: `0.01`
 
 ## What The Script Uses
 
-The script calls these Falcon REST APIs directly (via `requests`, no SDK):
+The script calls these Falcon REST APIs directly using only the Python standard library (no SDK, no `requests`):
 
 - Hosts (`/devices/queries/devices-scroll/v1`, `/devices/entities/devices/v2`)
 - Sensor Download (`/sensors/queries/installers/ccid/v1`)
 - Identity Protection GraphQL (`/identity-protection/combined/graphql/v1`)
+
+The only third-party dependency installed at first run is `reportlab` (for the PDF export).
 
 Minimum API permissions:
 

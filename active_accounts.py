@@ -2,8 +2,8 @@ import os
 import sys
 
 _REQUIRED_PYTHON = (3, 10)
-_DEPENDENCIES = ("requests", "reportlab")
-_IMPORT_PROBES = ("requests", "reportlab")
+_DEPENDENCIES = ("reportlab",)
+_IMPORT_PROBES = ("reportlab",)
 
 
 def _bootstrap() -> None:
@@ -88,9 +88,10 @@ import time
 from datetime import datetime, timedelta, timezone
 from itertools import cycle
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib import error as urllib_error
+from urllib import request as urllib_request
+from urllib.parse import urlencode, urlparse
 
-import requests
 from reportlab.graphics.charts.barcharts import HorizontalBarChart
 from reportlab.graphics.charts.legends import Legend
 from reportlab.graphics.charts.piecharts import Pie
@@ -614,7 +615,7 @@ def clear_screen() -> None:
 
 
 class FalconAPI:
-    """Minimal CrowdStrike Falcon REST client (replaces falconpy)."""
+    """Minimal CrowdStrike Falcon REST client using only Python stdlib."""
 
     def __init__(self, client_id: str, client_secret: str, base_url: str) -> None:
         self.base_url = base_url.rstrip("/")
@@ -623,20 +624,32 @@ class FalconAPI:
         self._token: str | None = None
         self._token_expiry: float = 0.0
 
-    def _authenticate(self) -> None:
-        resp = requests.post(
-            f"{self.base_url}/oauth2/token",
-            data={"client_id": self._client_id, "client_secret": self._client_secret},
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-            timeout=30,
-        )
+    @staticmethod
+    def _send(req: urllib_request.Request) -> tuple[int, dict[str, str], bytes]:
         try:
-            body = resp.json() if resp.content else {}
+            with urllib_request.urlopen(req, timeout=60) as resp:
+                return resp.status, dict(resp.headers.items()), resp.read()
+        except urllib_error.HTTPError as exc:
+            return exc.code, dict(exc.headers.items()) if exc.headers else {}, exc.read() or b""
+
+    def _authenticate(self) -> None:
+        data = urlencode(
+            {"client_id": self._client_id, "client_secret": self._client_secret}
+        ).encode("utf-8")
+        req = urllib_request.Request(
+            f"{self.base_url}/oauth2/token",
+            data=data,
+            method="POST",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        status, _, raw = self._send(req)
+        try:
+            body = json.loads(raw) if raw else {}
         except ValueError:
             body = {}
-        if resp.status_code not in (200, 201) or "access_token" not in body:
-            errors = body.get("errors") or [{"message": resp.text[:200]}]
-            raise RuntimeError(f"OAuth2 token error {resp.status_code}: {errors}")
+        if status not in (200, 201) or "access_token" not in body:
+            errors = body.get("errors") or [{"message": raw[:200].decode("utf-8", "replace")}]
+            raise RuntimeError(f"OAuth2 token error {status}: {errors}")
         self._token = body["access_token"]
         self._token_expiry = time.time() + int(body.get("expires_in", 1800)) - 60
 
@@ -646,22 +659,21 @@ class FalconAPI:
         return {"Authorization": f"Bearer {self._token}"}
 
     def _request(self, method: str, path: str, *, params=None, json_body=None) -> dict:
+        url = f"{self.base_url}{path}"
+        if params:
+            url = f"{url}?{urlencode(params, doseq=True)}"
         headers = self._auth_header()
+        data = None
         if json_body is not None:
             headers["Content-Type"] = "application/json"
-        resp = requests.request(
-            method,
-            f"{self.base_url}{path}",
-            headers=headers,
-            params=params,
-            json=json_body,
-            timeout=60,
-        )
+            data = json.dumps(json_body).encode("utf-8")
+        req = urllib_request.Request(url, data=data, method=method, headers=headers)
+        status, resp_headers, raw = self._send(req)
         try:
-            body = resp.json() if resp.content else {}
+            body = json.loads(raw) if raw else {}
         except ValueError:
-            body = {"raw": resp.text}
-        return {"status_code": resp.status_code, "headers": dict(resp.headers), "body": body}
+            body = {"raw": raw.decode("utf-8", "replace")}
+        return {"status_code": status, "headers": resp_headers, "body": body}
 
     # SensorDownload
     def get_sensor_installer_ccid(self) -> dict:
