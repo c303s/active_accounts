@@ -14,15 +14,12 @@ def _bootstrap() -> None:
         )
         sys.exit(1)
 
-    if os.environ.get("CSFTR_BOOTSTRAPPED") == "1":
-        return
-
+    import importlib
     import importlib.util
 
     if all(importlib.util.find_spec(name) is not None for name in _IMPORT_PROBES):
         return
 
-    import venv
     from pathlib import Path
     import subprocess
 
@@ -32,37 +29,52 @@ def _bootstrap() -> None:
         base = Path.home() / "Library/Application Support"
     else:
         base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
-    venv_dir = base / "crowdstrike-falcon-tenant-report" / "venv"
-
-    py = venv_dir / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
-    if not py.exists():
-        print(f"First-run setup: creating environment at {venv_dir}", file=sys.stderr)
-        venv_dir.parent.mkdir(parents=True, exist_ok=True)
-        venv.EnvBuilder(with_pip=True, upgrade_deps=False).create(venv_dir)
-        subprocess.check_call(
-            [str(py), "-m", "pip", "install", "--quiet", "--upgrade", "pip"]
-        )
-
-    probe = (
-        "import importlib.util, sys; "
-        f"sys.exit(0 if all(importlib.util.find_spec(n) for n in {_IMPORT_PROBES!r}) else 1)"
+    deps_dir = (
+        base
+        / "crowdstrike-falcon-tenant-report"
+        / f"deps-py{sys.version_info.major}.{sys.version_info.minor}"
     )
-    if subprocess.call([str(py), "-c", probe]) != 0:
-        print("Installing dependencies...", file=sys.stderr)
-        try:
-            subprocess.check_call(
-                [str(py), "-m", "pip", "install", "--quiet", *_DEPENDENCIES]
-            )
-        except subprocess.CalledProcessError as exc:
-            sys.stderr.write(
-                f"Failed to install dependencies (pip exit {exc.returncode}).\n"
-                f"Try removing {venv_dir} and re-running the script,\n"
-                f"or check your network/proxy configuration.\n"
-            )
-            sys.exit(1)
 
-    os.environ["CSFTR_BOOTSTRAPPED"] = "1"
-    os.execv(str(py), [str(py), os.path.abspath(__file__), *sys.argv[1:]])
+    sys.path.insert(0, str(deps_dir))
+    importlib.invalidate_caches()
+    if all(importlib.util.find_spec(name) is not None for name in _IMPORT_PROBES):
+        return
+
+    deps_dir.mkdir(parents=True, exist_ok=True)
+    print(
+        f"First-run setup: installing dependencies into {deps_dir}",
+        file=sys.stderr,
+    )
+    try:
+        subprocess.check_call(
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "--quiet",
+                "--disable-pip-version-check",
+                "--target",
+                str(deps_dir),
+                "--upgrade",
+                *_DEPENDENCIES,
+            ]
+        )
+    except subprocess.CalledProcessError as exc:
+        sys.stderr.write(
+            f"Failed to install dependencies (pip exit {exc.returncode}).\n"
+            f"Try removing {deps_dir} and re-running the script,\n"
+            f"or check your network/proxy configuration.\n"
+        )
+        sys.exit(1)
+    except FileNotFoundError:
+        sys.stderr.write(
+            "Python's pip module is not available. Install it first:\n"
+            f"  {sys.executable} -m ensurepip --upgrade\n"
+        )
+        sys.exit(1)
+
+    importlib.invalidate_caches()
 
 
 _bootstrap()
