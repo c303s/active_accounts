@@ -36,7 +36,7 @@ Minimum API permissions:
 - Python 3.10 or newer (any system Python works; nothing else needed)
 - A CrowdStrike Falcon API client with the required scopes
 
-The script uses only the Python standard library for HTTP. On first run it installs a single dependency (`reportlab`, used for the PDF export) into a hidden folder named `.falcon-deps-pyX.Y/` next to `active_accounts.py` itself. Nothing is written under `~/Library/Application Support` or any other user-wide data directory. Subsequent runs reuse the same folder; delete it to force a clean reinstall.
+The script uses only the Python standard library for HTTP. On first run it installs a single dependency (`reportlab`, used for the PDF export) into a hidden folder named `.falcon-deps-pyX.Y/` next to `active_accounts.py` itself. Credentials are stored in a `.env` file next to the script as well. Nothing is written under `~/Library/Application Support` or any other user-wide data directory. Subsequent runs reuse the same folder; delete it to force a clean reinstall.
 
 ## Install And Run
 
@@ -52,7 +52,7 @@ The installer:
 - resolves the latest commit SHA on `main` via the GitHub API and downloads a SHA-pinned copy of `active_accounts.py` into the current directory (this avoids stale results from the raw.githubusercontent.com CDN cache)
 - launches it
 
-On the first launch the script installs `reportlab` into its private dependency directory, then walks you through entering `FALCON_CLIENT_ID`, `FALCON_CLIENT_SECRET`, and `FALCON_BASE_URL` and stores them in a local `.env` file. Every later run is just:
+On the first launch the script installs `reportlab` into its hidden dependency directory, then walks you through entering `FALCON_CLIENT_ID`, `FALCON_CLIENT_SECRET`, and `FALCON_BASE_URL` and stores them in a `.env` file next to `active_accounts.py`. Every later run is just:
 
 ```bash
 python3 active_accounts.py
@@ -74,9 +74,9 @@ export HTTP_PROXY=$HTTPS_PROXY
 
 ## Configuration
 
-Create a local `.env` file based on `.env.example`.
+Create a local `.env` file manually, or let the script create it for you interactively on first run.
 
-If the script does not find `FALCON_CLIENT_ID`, `FALCON_CLIENT_SECRET`, or `FALCON_BASE_URL`, it starts an interactive setup wizard and writes them to a local `.env` file automatically.
+If the script does not find `FALCON_CLIENT_ID`, `FALCON_CLIENT_SECRET`, or `FALCON_BASE_URL`, it starts an interactive setup wizard and writes them to a `.env` file next to `active_accounts.py` automatically.
 
 Before entering credentials, make sure a Falcon API client already exists with these scopes enabled:
 
@@ -152,11 +152,11 @@ PDF output             : ACME-Group-0123456789ABCDEF0123456789ABCDEF-08-05-2026.
 
 ## Publish To GitHub
 
-This workspace is not automatically published by the script. To make it available on GitHub, do this from the repository root:
+This workspace is not automatically published by the script. To publish this repository from the repository root:
 
 ```bash
 git init
-git add README.md .gitignore .env.example active_accounts.py req_api_scopes procedure mymethod
+git add README.md .gitignore active_accounts.py install.sh req_api_scopes
 git commit -m "Initial commit"
 git branch -M main
 git remote add origin https://github.com/YOUR-USERNAME/YOUR-REPOSITORY.git
@@ -166,7 +166,7 @@ git push -u origin main
 If the repository already exists:
 
 ```bash
-git add README.md .gitignore .env.example active_accounts.py req_api_scopes procedure mymethod
+git add README.md .gitignore active_accounts.py install.sh req_api_scopes
 git commit -m "Add documentation and setup instructions"
 git push
 ```

@@ -4,6 +4,7 @@ import sys
 _REQUIRED_PYTHON = (3, 10)
 _DEPENDENCIES = ("reportlab",)
 _IMPORT_PROBES = ("reportlab",)
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def _bootstrap() -> None:
@@ -27,7 +28,7 @@ def _bootstrap() -> None:
     # so we never touch ~/Library/Application Support or any other user-wide
     # data directory. The directory name is Python-version-specific because
     # site-packages aren't portable across minor versions.
-    script_dir = Path(__file__).resolve().parent
+    script_dir = Path(SCRIPT_DIR)
     deps_dir = script_dir / f".falcon-deps-py{sys.version_info.major}.{sys.version_info.minor}"
 
     sys.path.insert(0, str(deps_dir))
@@ -113,8 +114,8 @@ TENANT_DISPLAY_NAMES = {
 
 APP_VERSION = "0.01"
 DEFAULT_BASE_URL = "https://api.eu-1.crowdstrike.com"
-ENV_PATH = Path.cwd() / ".env"
-LOGO_PATH = Path(__file__).with_name("crowdstrike-logo.png")
+ENV_PATH = Path(SCRIPT_DIR) / ".env"
+LOGO_PATH = Path(SCRIPT_DIR) / "crowdstrike-logo.png"
 CROWDSTRIKE_RED = colors.HexColor("#E01E26")
 CROWDSTRIKE_BLACK = colors.HexColor("#1A1A1A")
 CROWDSTRIKE_DARK = colors.HexColor("#252525")
