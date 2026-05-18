@@ -2,8 +2,8 @@ import os
 import sys
 
 _REQUIRED_PYTHON = (3, 10)
-_DEPENDENCIES = ("crowdstrike-falconpy", "python-dotenv", "reportlab")
-_IMPORT_PROBES = ("falconpy", "dotenv", "reportlab")
+_DEPENDENCIES = ("crowdstrike-falconpy", "reportlab")
+_IMPORT_PROBES = ("falconpy", "reportlab")
 
 
 def _bootstrap() -> None:
@@ -64,7 +64,6 @@ from itertools import cycle
 from pathlib import Path
 from urllib.parse import urlparse
 
-from dotenv import load_dotenv
 from falconpy import Hosts, IdentityProtection, SensorDownload
 from reportlab.graphics.charts.barcharts import HorizontalBarChart
 from reportlab.graphics.charts.legends import Legend
@@ -211,8 +210,10 @@ def _collect_credentials(
 
 
 def ensure_local_credentials() -> None:
-    load_dotenv(ENV_PATH)
     env_values = read_env_file(ENV_PATH)
+    for key, value in env_values.items():
+        os.environ.setdefault(key, value)
+
     client_id = env_values.get("FALCON_CLIENT_ID") or os.environ.get("FALCON_CLIENT_ID")
     client_secret = env_values.get("FALCON_CLIENT_SECRET") or os.environ.get("FALCON_CLIENT_SECRET")
     base_url = env_values.get("FALCON_BASE_URL") or os.environ.get("FALCON_BASE_URL")
@@ -635,7 +636,6 @@ class Spinner:
 
 clear_screen()
 ensure_local_credentials()
-load_dotenv()
 
 spinner = Spinner("Loading configuration")
 atexit.register(spinner.stop)
