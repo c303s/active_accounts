@@ -252,7 +252,6 @@ def print_startup_banner() -> None:
 
 
 def _preflight_credentials(client_id: str, client_secret: str, base_url: str) -> tuple[bool, str]:
-    print("Running credential pre-flight check...")
     api = FalconAPI(client_id=client_id, client_secret=client_secret, base_url=base_url)
 
     checks = [
@@ -320,9 +319,10 @@ def ensure_local_credentials() -> None:
         )
         ok, message = _preflight_credentials(client_id, client_secret, base_url)
         if ok:
-            print(message)
+            print("Running pre-flight check: successful.")
             break
 
+        print("Running pre-flight check: failed.")
         print(message)
         print("The credentials or required API access are not valid yet. Please enter valid credentials.")
         print()
