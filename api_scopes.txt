@@ -1,0 +1,4 @@
+Hosts: Read
+Sensor Download: Read
+Identity Protection: Read
+GraphQL: Write

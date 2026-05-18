@@ -30,6 +30,7 @@ Minimum API permissions:
 - Hosts: Read
 - Sensor Download: Read
 - Identity Protection: Read
+- GraphQL: Write
 
 ## Requirements
 
@@ -83,6 +84,7 @@ Before entering credentials, make sure a Falcon API client already exists with t
 - `Hosts: Read`
 - `Sensor Download: Read`
 - `Identity Protection: Read`
+- `GraphQL: Write`
 
 Required variables:
 
@@ -158,7 +160,7 @@ This workspace is not automatically published by the script. To publish this rep
 
 ```bash
 git init
-git add README.md .gitignore active_accounts.py install.sh req_api_scopes
+git add README.md .gitignore active_accounts.py install.sh api_scopes.txt
 git commit -m "Initial commit"
 git branch -M main
 git remote add origin https://github.com/YOUR-USERNAME/YOUR-REPOSITORY.git
@@ -168,7 +170,7 @@ git push -u origin main
 If the repository already exists:
 
 ```bash
-git add README.md .gitignore active_accounts.py install.sh req_api_scopes
+git add README.md .gitignore active_accounts.py install.sh api_scopes.txt
 git commit -m "Add documentation and setup instructions"
 git push
 ```
@@ -177,4 +179,4 @@ git push
 
 - Keep `.env` local only.
 - Rotate any credential that has already been stored in the repository or pasted into public history.
-- Use a read-only Falcon API client for this script.
+- Use the minimum scope set listed in `api_scopes.txt` for this script.
