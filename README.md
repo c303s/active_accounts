@@ -90,6 +90,10 @@ Required variables:
 - `FALCON_CLIENT_SECRET`
 - `FALCON_BASE_URL`
 
+Optional for corporate TLS interception or custom internal root CAs:
+
+- `FALCON_CA_BUNDLE` pointing to a PEM file containing the trusted root/intermediate certificate chain Python should use for Falcon API HTTPS connections
+
 Common Falcon base URLs:
 
 - `https://api.crowdstrike.com`

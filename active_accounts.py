@@ -85,6 +85,7 @@ import atexit
 import json
 import csv
 import getpass
+import ssl
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -625,11 +626,45 @@ class FalconAPI:
         self._client_secret = client_secret
         self._token: str | None = None
         self._token_expiry: float = 0.0
+        self._ssl_context = self._build_ssl_context()
 
     @staticmethod
-    def _send(req: urllib_request.Request) -> tuple[int, dict[str, str], bytes]:
+    def _build_ssl_context() -> ssl.SSLContext:
+        context = ssl.create_default_context()
+        ca_bundle = (
+            os.environ.get("FALCON_CA_BUNDLE")
+            or os.environ.get("SSL_CERT_FILE")
+            or os.environ.get("REQUESTS_CA_BUNDLE")
+            or os.environ.get("CURL_CA_BUNDLE")
+        )
+        if ca_bundle:
+            bundle_path = Path(ca_bundle).expanduser()
+            if not bundle_path.is_file():
+                raise RuntimeError(
+                    f"Configured CA bundle does not exist: {bundle_path}. "
+                    "Set FALCON_CA_BUNDLE (or SSL_CERT_FILE) to a valid PEM file."
+                )
+            context.load_verify_locations(cafile=str(bundle_path))
+        return context
+
+    def _ssl_error(self, exc: Exception) -> RuntimeError:
+        host = urlparse(self.base_url).netloc or self.base_url
+        message = (
+            f"TLS certificate verification failed while connecting to {host}. "
+            "Python does not trust the certificate chain presented to this machine. "
+            "If your company uses TLS inspection, export the corporate root CA as a PEM file and set "
+            "FALCON_CA_BUNDLE=/path/to/corp-root-ca.pem before running the script. "
+            "You can also try SSL_CERT_FILE=/path/to/corp-root-ca.pem. "
+            f"Original error: {exc}"
+        )
+        return RuntimeError(message)
+
+    @staticmethod
+    def _send(
+        req: urllib_request.Request, context: ssl.SSLContext
+    ) -> tuple[int, dict[str, str], bytes]:
         try:
-            with urllib_request.urlopen(req, timeout=60) as resp:
+            with urllib_request.urlopen(req, timeout=60, context=context) as resp:
                 return resp.status, dict(resp.headers.items()), resp.read()
         except urllib_error.HTTPError as exc:
             return exc.code, dict(exc.headers.items()) if exc.headers else {}, exc.read() or b""
@@ -644,7 +679,14 @@ class FalconAPI:
             method="POST",
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
-        status, _, raw = self._send(req)
+        try:
+            status, _, raw = self._send(req, self._ssl_context)
+        except ssl.SSLError as exc:
+            raise self._ssl_error(exc) from exc
+        except urllib_error.URLError as exc:
+            if isinstance(exc.reason, ssl.SSLError):
+                raise self._ssl_error(exc.reason) from exc
+            raise RuntimeError(f"Network error while requesting Falcon OAuth token: {exc.reason}") from exc
         try:
             body = json.loads(raw) if raw else {}
         except ValueError:
@@ -670,7 +712,14 @@ class FalconAPI:
             headers["Content-Type"] = "application/json"
             data = json.dumps(json_body).encode("utf-8")
         req = urllib_request.Request(url, data=data, method=method, headers=headers)
-        status, resp_headers, raw = self._send(req)
+        try:
+            status, resp_headers, raw = self._send(req, self._ssl_context)
+        except ssl.SSLError as exc:
+            raise self._ssl_error(exc) from exc
+        except urllib_error.URLError as exc:
+            if isinstance(exc.reason, ssl.SSLError):
+                raise self._ssl_error(exc.reason) from exc
+            raise RuntimeError(f"Network error while requesting {url}: {exc.reason}") from exc
         try:
             body = json.loads(raw) if raw else {}
         except ValueError:
