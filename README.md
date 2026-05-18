@@ -31,35 +31,36 @@ Minimum API permissions:
 
 ## Requirements
 
-- Python 3.10 or newer
+- Python 3.10 or newer (any system Python works; nothing else needed)
 - A CrowdStrike Falcon API client with the required scopes
 
-## One-Command Install
+On first run, `active_accounts.py` creates a private environment under your user data directory (e.g. `~/Library/Application Support/crowdstrike-falcon-tenant-report/venv` on macOS, `~/.local/share/crowdstrike-falcon-tenant-report/venv` on Linux) and installs its dependencies there. Subsequent runs reuse it.
 
-Download, install, and set up the script with a single command:
+## Install And Run
+
+One command — download, set up, and run:
 
 ```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/c303s/crowdstrike-falcon-tenant-report/main/install.sh)"
 ```
 
-The installer will:
+The installer:
 
-- download the latest version of the repository into the current directory
-- create a local virtual environment
-- install the Python dependencies
-- show a reminder that a Falcon API client must already exist with the required scopes enabled
-- ask for `FALCON_CLIENT_ID`, `FALCON_CLIENT_SECRET`, and `FALCON_BASE_URL` if they are not already available
-- store those credentials in a local `.env` file with restricted file permissions
-- create a local launcher at `./crowdstrike-falcon-tenant-report`
+- verifies that Python 3.10+ is available
+- downloads `active_accounts.py` into the current directory
+- launches it
 
-Run the installer from the directory where you want the project files to live.
-
-Install dependencies:
+On the first launch the script bootstraps its own dependencies into a hidden environment under your user data directory, then walks you through entering `FALCON_CLIENT_ID`, `FALCON_CLIENT_SECRET`, and `FALCON_BASE_URL` and stores them in a local `.env` file. Every later run is just:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+python3 active_accounts.py
+```
+
+Manual alternative (skip the installer):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/c303s/crowdstrike-falcon-tenant-report/main/active_accounts.py -o active_accounts.py
+python3 active_accounts.py
 ```
 
 ## Configuration
@@ -142,7 +143,7 @@ This workspace is not automatically published by the script. To make it availabl
 
 ```bash
 git init
-git add README.md .gitignore .env.example active_accounts.py requirements.txt req_api_scopes procedure mymethod
+git add README.md .gitignore .env.example active_accounts.py req_api_scopes procedure mymethod
 git commit -m "Initial commit"
 git branch -M main
 git remote add origin https://github.com/YOUR-USERNAME/YOUR-REPOSITORY.git
@@ -152,7 +153,7 @@ git push -u origin main
 If the repository already exists:
 
 ```bash
-git add README.md .gitignore .env.example active_accounts.py requirements.txt req_api_scopes procedure mymethod
+git add README.md .gitignore .env.example active_accounts.py req_api_scopes procedure mymethod
 git commit -m "Add documentation and setup instructions"
 git push
 ```

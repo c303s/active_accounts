@@ -1,5 +1,58 @@
 import os
 import sys
+
+_REQUIRED_PYTHON = (3, 10)
+_DEPENDENCIES = ("crowdstrike-falconpy", "python-dotenv", "reportlab")
+_IMPORT_PROBES = ("falconpy", "dotenv", "reportlab")
+
+
+def _bootstrap() -> None:
+    if sys.version_info < _REQUIRED_PYTHON:
+        sys.stderr.write(
+            f"Python {_REQUIRED_PYTHON[0]}.{_REQUIRED_PYTHON[1]}+ required, "
+            f"found {sys.version.split()[0]}.\n"
+        )
+        sys.exit(1)
+
+    if os.environ.get("CSFTR_BOOTSTRAPPED") == "1":
+        return
+
+    import importlib.util
+
+    if all(importlib.util.find_spec(name) is not None for name in _IMPORT_PROBES):
+        return
+
+    import venv
+    from pathlib import Path
+    import subprocess
+
+    if sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData/Local"))
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library/Application Support"
+    else:
+        base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
+    venv_dir = base / "crowdstrike-falcon-tenant-report" / "venv"
+
+    py = venv_dir / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+    if not py.exists():
+        print(f"First-run setup: creating environment at {venv_dir}", file=sys.stderr)
+        venv_dir.parent.mkdir(parents=True, exist_ok=True)
+        venv.EnvBuilder(with_pip=True, upgrade_deps=False).create(venv_dir)
+        print("Installing dependencies...", file=sys.stderr)
+        subprocess.check_call(
+            [str(py), "-m", "pip", "install", "--quiet", "--upgrade", "pip"]
+        )
+        subprocess.check_call(
+            [str(py), "-m", "pip", "install", "--quiet", *_DEPENDENCIES]
+        )
+
+    os.environ["CSFTR_BOOTSTRAPPED"] = "1"
+    os.execv(str(py), [str(py), os.path.abspath(__file__), *sys.argv[1:]])
+
+
+_bootstrap()
+
 import atexit
 import json
 import csv

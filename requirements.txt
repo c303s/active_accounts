@@ -1,3 +1,0 @@
-crowdstrike-falconpy
-python-dotenv
-reportlab
