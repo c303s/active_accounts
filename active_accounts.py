@@ -49,9 +49,17 @@ def _bootstrap() -> None:
     )
     if subprocess.call([str(py), "-c", probe]) != 0:
         print("Installing dependencies...", file=sys.stderr)
-        subprocess.check_call(
-            [str(py), "-m", "pip", "install", "--quiet", *_DEPENDENCIES]
-        )
+        try:
+            subprocess.check_call(
+                [str(py), "-m", "pip", "install", "--quiet", *_DEPENDENCIES]
+            )
+        except subprocess.CalledProcessError as exc:
+            sys.stderr.write(
+                f"Failed to install dependencies (pip exit {exc.returncode}).\n"
+                f"Try removing {venv_dir} and re-running the script,\n"
+                f"or check your network/proxy configuration.\n"
+            )
+            sys.exit(1)
 
     os.environ["CSFTR_BOOTSTRAPPED"] = "1"
     os.execv(str(py), [str(py), os.path.abspath(__file__), *sys.argv[1:]])
@@ -90,7 +98,6 @@ TENANT_DISPLAY_NAMES = {
 APP_VERSION = "0.01"
 DEFAULT_BASE_URL = "https://api.eu-1.crowdstrike.com"
 ENV_PATH = Path.cwd() / ".env"
-SCRIPT_PATH = Path(__file__).name
 LOGO_PATH = Path(__file__).with_name("crowdstrike-logo.png")
 CROWDSTRIKE_RED = colors.HexColor("#E01E26")
 CROWDSTRIKE_BLACK = colors.HexColor("#1A1A1A")
@@ -108,10 +115,13 @@ def read_env_file(path: Path) -> dict[str, str]:
 
     for line in path.read_text(encoding="utf-8").splitlines():
         stripped = line.strip()
-        if not stripped or stripped.startswith("#") or "=" not in line:
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
             continue
-        key, value = line.split("=", 1)
-        values[key.strip()] = value.strip()
+        key, value = stripped.split("=", 1)
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+            value = value[1:-1]
+        values[key.strip()] = value
 
     return values
 
@@ -640,6 +650,22 @@ class Spinner:
             time.sleep(0.1)
 
 
+def _friendly_excepthook(exc_type, exc_value, exc_traceback) -> None:
+    try:
+        spinner.stop()
+    except Exception:
+        pass
+    if issubclass(exc_type, KeyboardInterrupt):
+        sys.stderr.write("\nAborted by user.\n")
+        sys.exit(130)
+    if issubclass(exc_type, RuntimeError):
+        sys.stderr.write(f"\nError: {exc_value}\n")
+        sys.exit(1)
+    sys.__excepthook__(exc_type, exc_value, exc_traceback)
+
+
+sys.excepthook = _friendly_excepthook
+
 clear_screen()
 ensure_local_credentials()
 
@@ -878,7 +904,9 @@ while True:
         break
     after = page_info.get("endCursor")
 
-category_counts["human"] = verified_total - category_counts["service"] - category_counts["admin"]
+category_counts["human"] = max(
+    0, verified_total - category_counts["service"] - category_counts["admin"]
+)
 total_active_accounts = sum(category_counts.values())
 human_percentage = (category_counts["human"] / total_active_accounts * 100) if total_active_accounts else 0
 
