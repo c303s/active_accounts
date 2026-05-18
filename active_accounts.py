@@ -87,6 +87,7 @@ import json
 import csv
 import getpass
 import ssl
+import subprocess
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -653,12 +654,98 @@ class FalconAPI:
         message = (
             f"TLS certificate verification failed while connecting to {host}. "
             "Python does not trust the certificate chain presented to this machine. "
+            "The script also tries to fall back to curl/system trust automatically; "
+            "this message means that fallback was unavailable or also failed. "
             "If your company uses TLS inspection, export the corporate root CA as a PEM file and set "
             "FALCON_CA_BUNDLE=/path/to/corp-root-ca.pem before running the script. "
             "You can also try SSL_CERT_FILE=/path/to/corp-root-ca.pem. "
             f"Original error: {exc}"
         )
         return RuntimeError(message)
+
+    def _send_with_curl(
+        self,
+        req: urllib_request.Request,
+        ssl_exc: Exception,
+    ) -> tuple[int, dict[str, str], bytes]:
+        curl_cmd = [
+            "curl",
+            "-sS",
+            "--connect-timeout",
+            "30",
+            "--max-time",
+            "60",
+            "-X",
+            req.get_method(),
+        ]
+
+        for key, value in req.header_items():
+            curl_cmd.extend(["-H", f"{key}: {value}"])
+
+        ca_bundle = (
+            os.environ.get("FALCON_CA_BUNDLE")
+            or os.environ.get("SSL_CERT_FILE")
+            or os.environ.get("CURL_CA_BUNDLE")
+        )
+        if ca_bundle:
+            curl_cmd.extend(["--cacert", str(Path(ca_bundle).expanduser())])
+
+        body = req.data if req.data is not None else b""
+        if body:
+            curl_cmd.extend(["--data-binary", "@-"])
+
+        status_marker = "\n__FALCON_HTTP_STATUS__:"
+        curl_cmd.extend([
+            "-w",
+            status_marker + "%{http_code}",
+            req.full_url,
+        ])
+
+        try:
+            result = subprocess.run(
+                curl_cmd,
+                input=body,
+                capture_output=True,
+                check=False,
+            )
+        except FileNotFoundError as exc:
+            raise self._ssl_error(ssl_exc) from exc
+
+        if result.returncode != 0:
+            stderr = result.stderr.decode("utf-8", "replace").strip()
+            raise RuntimeError(
+                f"Python TLS verification failed and curl fallback also failed: {stderr or ssl_exc}"
+            )
+
+        stdout = result.stdout
+        marker = status_marker.encode("utf-8")
+        if marker not in stdout:
+            raise RuntimeError(
+                "curl fallback succeeded but did not return an HTTP status code."
+            )
+
+        raw_body, _, raw_status = stdout.rpartition(marker)
+        try:
+            status_code = int(raw_status.decode("utf-8", "replace").strip())
+        except ValueError as exc:
+            raise RuntimeError(
+                "curl fallback returned an invalid HTTP status code."
+            ) from exc
+
+        return status_code, {}, raw_body
+
+    def _send_with_fallback(
+        self,
+        req: urllib_request.Request,
+    ) -> tuple[int, dict[str, str], bytes]:
+        try:
+            return self._send(req, self._ssl_context)
+        except ssl.SSLError as exc:
+            return self._send_with_curl(req, exc)
+        except urllib_error.URLError as exc:
+            if isinstance(exc.reason, ssl.SSLError):
+                return self._send_with_curl(req, exc.reason)
+            raise
 
     @staticmethod
     def _send(
@@ -681,12 +768,8 @@ class FalconAPI:
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
         try:
-            status, _, raw = self._send(req, self._ssl_context)
-        except ssl.SSLError as exc:
-            raise self._ssl_error(exc) from exc
+            status, _, raw = self._send_with_fallback(req)
         except urllib_error.URLError as exc:
-            if isinstance(exc.reason, ssl.SSLError):
-                raise self._ssl_error(exc.reason) from exc
             raise RuntimeError(f"Network error while requesting Falcon OAuth token: {exc.reason}") from exc
         try:
             body = json.loads(raw) if raw else {}
@@ -714,12 +797,8 @@ class FalconAPI:
             data = json.dumps(json_body).encode("utf-8")
         req = urllib_request.Request(url, data=data, method=method, headers=headers)
         try:
-            status, resp_headers, raw = self._send(req, self._ssl_context)
-        except ssl.SSLError as exc:
-            raise self._ssl_error(exc) from exc
+            status, resp_headers, raw = self._send_with_fallback(req)
         except urllib_error.URLError as exc:
-            if isinstance(exc.reason, ssl.SSLError):
-                raise self._ssl_error(exc.reason) from exc
             raise RuntimeError(f"Network error while requesting {url}: {exc.reason}") from exc
         try:
             body = json.loads(raw) if raw else {}

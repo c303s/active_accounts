@@ -94,6 +94,8 @@ Optional for corporate TLS interception or custom internal root CAs:
 
 - `FALCON_CA_BUNDLE` pointing to a PEM file containing the trusted root/intermediate certificate chain Python should use for Falcon API HTTPS connections
 
+On macOS and other systems where Python's certificate store is missing or incomplete, the script automatically falls back to `curl` for Falcon API HTTPS calls when Python TLS verification fails. That lets it use the system trust store in many environments without extra setup.
+
 Common Falcon base URLs:
 
 - `https://api.crowdstrike.com`
