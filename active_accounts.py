@@ -84,9 +84,8 @@ TENANT_DISPLAY_NAMES = {
 
 APP_VERSION = "0.01"
 DEFAULT_BASE_URL = "https://api.eu-1.crowdstrike.com"
-ENV_PATH = Path(__file__).with_name(".env")
+ENV_PATH = Path.cwd() / ".env"
 SCRIPT_PATH = Path(__file__).name
-LAUNCHER_PATH = Path(__file__).with_name("crowdstrike-falcon-tenant-report")
 LOGO_PATH = Path(__file__).with_name("crowdstrike-logo.png")
 CROWDSTRIKE_RED = colors.HexColor("#E01E26")
 CROWDSTRIKE_BLACK = colors.HexColor("#1A1A1A")
@@ -163,44 +162,82 @@ def prompt_env_value(
         print(f"{name} cannot be empty.")
 
 
-def ensure_local_credentials() -> None:
-    load_dotenv()
-    env_values = read_env_file(ENV_PATH)
-    client_id = os.environ.get("FALCON_CLIENT_ID") or env_values.get("FALCON_CLIENT_ID")
-    client_secret = os.environ.get("FALCON_CLIENT_SECRET") or env_values.get("FALCON_CLIENT_SECRET")
-    base_url = os.environ.get("FALCON_BASE_URL") or env_values.get("FALCON_BASE_URL")
+def _prompt_yes_no(prompt: str, default: bool = False) -> bool:
+    suffix = " [y/N]: " if not default else " [Y/n]: "
+    try:
+        answer = input(prompt + suffix).strip().lower()
+    except EOFError:
+        return default
+    if not answer:
+        return default
+    return answer in ("y", "yes")
 
-    if client_id and client_secret and base_url:
+
+def _collect_credentials(
+    existing_id: str | None,
+    existing_secret: str | None,
+    existing_base_url: str | None,
+) -> tuple[str, str, str]:
+    if existing_id:
+        client_id = prompt_env_value(
+            "FALCON_CLIENT_ID", "FALCON_CLIENT_ID", default=existing_id
+        )
+    else:
+        client_id = prompt_env_value("FALCON_CLIENT_ID", "FALCON_CLIENT_ID")
+
+    if existing_secret:
+        entered = getpass.getpass(
+            "FALCON_CLIENT_SECRET [leave blank to keep current]: "
+        ).strip()
+        client_secret = entered or existing_secret
+    else:
+        client_secret = prompt_env_value(
+            "FALCON_CLIENT_SECRET", "FALCON_CLIENT_SECRET", secret=True
+        )
+
+    base_url = prompt_env_value(
+        "FALCON_BASE_URL",
+        "FALCON_BASE_URL",
+        default=existing_base_url or DEFAULT_BASE_URL,
+    )
+    return client_id, client_secret, base_url
+
+
+def ensure_local_credentials() -> None:
+    load_dotenv(ENV_PATH)
+    env_values = read_env_file(ENV_PATH)
+    client_id = env_values.get("FALCON_CLIENT_ID") or os.environ.get("FALCON_CLIENT_ID")
+    client_secret = env_values.get("FALCON_CLIENT_SECRET") or os.environ.get("FALCON_CLIENT_SECRET")
+    base_url = env_values.get("FALCON_BASE_URL") or os.environ.get("FALCON_BASE_URL")
+
+    have_all = bool(client_id and client_secret and base_url)
+    interactive = sys.stdin.isatty()
+
+    if have_all and not interactive:
         return
 
-    if not sys.stdin.isatty():
-        raise RuntimeError(
-            "Missing Falcon credentials. Run the script interactively once or create a local .env file."
-        )
+    if have_all and interactive:
+        print(f"Found existing credentials in {ENV_PATH}")
+        print(f"  FALCON_CLIENT_ID  = {client_id}")
+        print(f"  FALCON_CLIENT_SECRET = {'*' * 8} (hidden)")
+        print(f"  FALCON_BASE_URL   = {base_url}")
+        if not _prompt_yes_no("Update these credentials?", default=False):
+            return
+    else:
+        if not interactive:
+            raise RuntimeError(
+                "Missing Falcon credentials. Run the script interactively once or create a local .env file."
+            )
+        print(f"CrowdStrike Falcon Tenant Report v{APP_VERSION}")
+        print("Falcon API credentials are missing. Let's create a local .env file.")
+        print("Before continuing, create a Falcon API client with these scopes enabled:")
+        print("  - Hosts: Read")
+        print("  - Sensor Download: Read")
+        print("  - Identity Protection: Read")
 
-    print(f"CrowdStrike Falcon Tenant Report v{APP_VERSION}")
-    print("Falcon API credentials are missing. Let's create a local .env file.")
-    print("Before continuing, create a Falcon API client with these scopes enabled:")
-    print("  - Hosts: Read")
-    print("  - Sensor Download: Read")
-    print("  - Identity Protection: Read")
-
-    if not client_id:
-        client_id = prompt_env_value("FALCON_CLIENT_ID", "Enter FALCON_CLIENT_ID")
-
-    if not client_secret:
-        client_secret = prompt_env_value(
-            "FALCON_CLIENT_SECRET",
-            "Enter FALCON_CLIENT_SECRET",
-            secret=True,
-        )
-
-    if not base_url:
-        base_url = prompt_env_value(
-            "FALCON_BASE_URL",
-            "Enter FALCON_BASE_URL",
-            default=DEFAULT_BASE_URL,
-        )
+    client_id, client_secret, base_url = _collect_credentials(
+        client_id, client_secret, base_url
+    )
 
     env_values["FALCON_CLIENT_ID"] = client_id
     env_values["FALCON_CLIENT_SECRET"] = client_secret
@@ -211,11 +248,7 @@ def ensure_local_credentials() -> None:
     os.environ["FALCON_CLIENT_SECRET"] = client_secret
     os.environ["FALCON_BASE_URL"] = base_url
 
-    print(f"Saved credentials to {ENV_PATH.name}.")
-    print("Run the report with one of these commands:")
-    print(f"  python3 {SCRIPT_PATH}")
-    if LAUNCHER_PATH.exists():
-        print(f"  ./{LAUNCHER_PATH.name}")
+    print(f"Saved credentials to {ENV_PATH}.")
 
 
 def derive_tenant_label_from_domains(domains: set[str]) -> str | None:
