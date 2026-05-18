@@ -23,24 +23,26 @@ def _bootstrap() -> None:
     from pathlib import Path
     import subprocess
 
-    if sys.platform == "win32":
-        base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData/Local"))
-    elif sys.platform == "darwin":
-        base = Path.home() / "Library/Application Support"
-    else:
-        base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
-    deps_dir = (
-        base
-        / "crowdstrike-falcon-tenant-report"
-        / f"deps-py{sys.version_info.major}.{sys.version_info.minor}"
-    )
+    # Install dependencies in a hidden directory next to the script itself,
+    # so we never touch ~/Library/Application Support or any other user-wide
+    # data directory. The directory name is Python-version-specific because
+    # site-packages aren't portable across minor versions.
+    script_dir = Path(__file__).resolve().parent
+    deps_dir = script_dir / f".falcon-deps-py{sys.version_info.major}.{sys.version_info.minor}"
 
     sys.path.insert(0, str(deps_dir))
     importlib.invalidate_caches()
     if all(importlib.util.find_spec(name) is not None for name in _IMPORT_PROBES):
         return
 
-    deps_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        deps_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        sys.stderr.write(
+            f"Cannot create dependency directory {deps_dir}: {exc}\n"
+            f"Run the script from a directory you can write to.\n"
+        )
+        sys.exit(1)
     print(
         f"First-run setup: installing dependencies into {deps_dir}",
         file=sys.stderr,

@@ -36,7 +36,7 @@ Minimum API permissions:
 - Python 3.10 or newer (any system Python works; nothing else needed)
 - A CrowdStrike Falcon API client with the required scopes
 
-The script uses only the Python standard library for HTTP. On first run it installs a single dependency (`reportlab`, used for the PDF export) into a private directory under your user data folder (e.g. `~/Library/Application Support/crowdstrike-falcon-tenant-report/deps-pyX.Y` on macOS, `~/.local/share/crowdstrike-falcon-tenant-report/deps-pyX.Y` on Linux). Subsequent runs reuse it.
+The script uses only the Python standard library for HTTP. On first run it installs a single dependency (`reportlab`, used for the PDF export) into a hidden folder named `.falcon-deps-pyX.Y/` next to `active_accounts.py` itself. Nothing is written under `~/Library/Application Support` or any other user-wide data directory. Subsequent runs reuse the same folder; delete it to force a clean reinstall.
 
 ## Install And Run
 
