@@ -178,12 +178,17 @@ def _collect_credentials(
     existing_secret: str | None,
     existing_base_url: str | None,
 ) -> tuple[str, str, str]:
+    print()
+    print("Please enter the Falcon API credentials:")
+    print()
+
     if existing_id:
         client_id = prompt_env_value(
             "FALCON_CLIENT_ID", "FALCON_CLIENT_ID", default=existing_id
         )
     else:
         client_id = prompt_env_value("FALCON_CLIENT_ID", "FALCON_CLIENT_ID")
+    print()
 
     if existing_secret:
         entered = getpass.getpass(
@@ -194,12 +199,14 @@ def _collect_credentials(
         client_secret = prompt_env_value(
             "FALCON_CLIENT_SECRET", "FALCON_CLIENT_SECRET", secret=True
         )
+    print()
 
     base_url = prompt_env_value(
         "FALCON_BASE_URL",
         "FALCON_BASE_URL",
         default=existing_base_url or DEFAULT_BASE_URL,
     )
+    print()
     return client_id, client_secret, base_url
 
 
