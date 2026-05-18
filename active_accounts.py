@@ -39,10 +39,16 @@ def _bootstrap() -> None:
         print(f"First-run setup: creating environment at {venv_dir}", file=sys.stderr)
         venv_dir.parent.mkdir(parents=True, exist_ok=True)
         venv.EnvBuilder(with_pip=True, upgrade_deps=False).create(venv_dir)
-        print("Installing dependencies...", file=sys.stderr)
         subprocess.check_call(
             [str(py), "-m", "pip", "install", "--quiet", "--upgrade", "pip"]
         )
+
+    probe = (
+        "import importlib.util, sys; "
+        f"sys.exit(0 if all(importlib.util.find_spec(n) for n in {_IMPORT_PROBES!r}) else 1)"
+    )
+    if subprocess.call([str(py), "-c", probe]) != 0:
+        print("Installing dependencies...", file=sys.stderr)
         subprocess.check_call(
             [str(py), "-m", "pip", "install", "--quiet", *_DEPENDENCIES]
         )
