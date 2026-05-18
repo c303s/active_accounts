@@ -53,7 +53,7 @@ The installer:
 - resolves the latest commit SHA on `main` via the GitHub API and downloads a SHA-pinned copy of `active_accounts.py` into the current directory (this avoids stale results from the raw.githubusercontent.com CDN cache)
 - launches it
 
-On the first launch the script installs `reportlab` into its hidden dependency directory, then walks you through entering `FALCON_CLIENT_ID`, `FALCON_CLIENT_SECRET`, and `FALCON_BASE_URL` and stores them in a `.env` file next to `active_accounts.py`. Every later run is just:
+On the first launch the script shows an ASCII-art banner, installs `reportlab` into its hidden dependency directory, then walks you through entering `FALCON_CLIENT_ID`, `FALCON_CLIENT_SECRET`, and `FALCON_BASE_URL`. Before saving `.env`, it runs a quick pre-flight check against the Falcon APIs to verify the credentials and required access. Every later run is just:
 
 ```bash
 python3 active_accounts.py
@@ -77,7 +77,7 @@ export HTTP_PROXY=$HTTPS_PROXY
 
 Create a local `.env` file manually, or let the script create it for you interactively on first run.
 
-If the script does not find `FALCON_CLIENT_ID`, `FALCON_CLIENT_SECRET`, or `FALCON_BASE_URL`, it starts an interactive setup wizard and writes them to a `.env` file next to `active_accounts.py` automatically.
+If the script does not find `FALCON_CLIENT_ID`, `FALCON_CLIENT_SECRET`, or `FALCON_BASE_URL`, it starts an interactive setup wizard and writes them to a `.env` file next to `active_accounts.py` automatically after the pre-flight check succeeds.
 
 Before entering credentials, make sure a Falcon API client already exists with these scopes enabled:
 

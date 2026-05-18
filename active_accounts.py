@@ -243,6 +243,61 @@ def _collect_credentials(
     return client_id, client_secret, base_url
 
 
+def print_startup_banner() -> None:
+    print(r"""
+  ____                         _______ __       _ __
+ / ___|_ __ _____      _____  / ___/ // /______(_) /_____ 
+| |   | '__/ _ \ \ /\ / / _ \ \__ \/ // //_/ ___/ / //_/ _ \
+| |___| | | (_) \ V  V /  __/___/ /__  __/ /  / / ,< /  __/
+ \____|_|  \___/ \_/\_/ \___//____/  /_/ /_/  /_/_/|_|\___|
+
+   ______    __                    ______                     __
+  / ____/___/ /________  ____     /_  __/__  ____  ____ _____/ /_
+ / /   / __  / ___/ __ \/ __ \     / / / _ \/ __ \/ __ `/ __  / /
+/ /___/ /_/ / /  / /_/ / /_/ /    / / /  __/ / / / /_/ / /_/ / / 
+\____/\__,_/_/   \____/\____/    /_/  \___/_/ /_/\__,_/\__,_/_/  
+
+    ____                       __
+   / __ \___  ____  ____  _____/ /_
+  / /_/ / _ \/ __ \/ __ \/ ___/ __/
+ / _, _/  __/ /_/ / /_/ / /  / /_
+/_/ |_|\___/ .___/\____/_/   \__/
+          /_/
+""")
+    print("Connects to CrowdStrike Falcon, validates API access, and generates tenant summary reports.")
+    print(f"Version {APP_VERSION}. This is not an offical CrowdStrike tool.")
+    print()
+
+
+def _preflight_credentials(client_id: str, client_secret: str, base_url: str) -> tuple[bool, str]:
+    print("Running credential pre-flight check...")
+    api = FalconAPI(client_id=client_id, client_secret=client_secret, base_url=base_url)
+
+    checks = [
+        ("Sensor Download", api.get_sensor_installer_ccid),
+        ("Hosts", lambda: api.query_devices_by_filter_scroll(limit=1)),
+        ("GraphQL", lambda: api.graphql(query="query { __typename }")),
+    ]
+
+    for label, action in checks:
+        try:
+            response = action()
+        except RuntimeError as exc:
+            return False, f"{label} pre-flight failed: {exc}"
+
+        if response["status_code"] != 200:
+            errors = response.get("body", {}).get("errors", [])
+            return False, (
+                f"{label} pre-flight failed with status {response['status_code']}: {errors}"
+            )
+
+        body = response.get("body", {})
+        if body.get("errors"):
+            return False, f"{label} pre-flight failed: {body['errors']}"
+
+    return True, "Credential pre-flight check passed."
+
+
 def ensure_local_credentials() -> None:
     env_values = read_env_file(ENV_PATH)
     for key, value in env_values.items():
@@ -270,16 +325,25 @@ def ensure_local_credentials() -> None:
             raise RuntimeError(
                 "Missing Falcon credentials. Run the script interactively once or create a local .env file."
             )
-        print(f"CrowdStrike Falcon Tenant Report v{APP_VERSION}")
-        print("Falcon API credentials are missing. Let's create a local .env file.")
+        print(f"Falcon API credentials are missing. Let's create {ENV_PATH}.")
         print("Before continuing, create a Falcon API client with these scopes enabled:")
         print("  - Hosts: Read")
         print("  - Sensor Download: Read")
         print("  - Identity Protection: Read")
+        print("  - GraphQL: Write")
 
-    client_id, client_secret, base_url = _collect_credentials(
-        client_id, client_secret, base_url
-    )
+    while True:
+        client_id, client_secret, base_url = _collect_credentials(
+            client_id, client_secret, base_url
+        )
+        ok, message = _preflight_credentials(client_id, client_secret, base_url)
+        if ok:
+            print(message)
+            break
+
+        print(message)
+        print("The credentials or required API access are not valid yet. Please enter valid credentials.")
+        print()
 
     env_values["FALCON_CLIENT_ID"] = client_id
     env_values["FALCON_CLIENT_SECRET"] = client_secret
@@ -892,6 +956,7 @@ def _friendly_excepthook(exc_type, exc_value, exc_traceback) -> None:
 sys.excepthook = _friendly_excepthook
 
 clear_screen()
+print_startup_banner()
 ensure_local_credentials()
 
 spinner = Spinner("Loading configuration")
