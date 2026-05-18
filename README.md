@@ -36,7 +36,7 @@ Minimum API permissions:
 - Python 3.10 or newer (any system Python works; nothing else needed)
 - A CrowdStrike Falcon API client with the required scopes
 
-On first run, `active_accounts.py` creates a private environment under your user data directory (e.g. `~/Library/Application Support/crowdstrike-falcon-tenant-report/venv` on macOS, `~/.local/share/crowdstrike-falcon-tenant-report/venv` on Linux) and installs its dependencies there. Subsequent runs reuse it.
+The script uses only the Python standard library for HTTP. On first run it installs a single dependency (`reportlab`, used for the PDF export) into a private directory under your user data folder (e.g. `~/Library/Application Support/crowdstrike-falcon-tenant-report/deps-pyX.Y` on macOS, `~/.local/share/crowdstrike-falcon-tenant-report/deps-pyX.Y` on Linux). Subsequent runs reuse it.
 
 ## Install And Run
 
@@ -49,10 +49,10 @@ One command — download, set up, and run:
 The installer:
 
 - verifies that Python 3.10+ is available
-- downloads `active_accounts.py` into the current directory
+- resolves the latest commit SHA on `main` via the GitHub API and downloads a SHA-pinned copy of `active_accounts.py` into the current directory (this avoids stale results from the raw.githubusercontent.com CDN cache)
 - launches it
 
-On the first launch the script bootstraps its own dependencies into a hidden environment under your user data directory, then walks you through entering `FALCON_CLIENT_ID`, `FALCON_CLIENT_SECRET`, and `FALCON_BASE_URL` and stores them in a local `.env` file. Every later run is just:
+On the first launch the script installs `reportlab` into its private dependency directory, then walks you through entering `FALCON_CLIENT_ID`, `FALCON_CLIENT_SECRET`, and `FALCON_BASE_URL` and stores them in a local `.env` file. Every later run is just:
 
 ```bash
 python3 active_accounts.py
@@ -63,6 +63,13 @@ Manual alternative (skip the installer):
 ```bash
 curl -fsSL https://raw.githubusercontent.com/c303s/crowdstrike-falcon-tenant-report/main/active_accounts.py -o active_accounts.py
 python3 active_accounts.py
+```
+
+Behind a corporate proxy? Set `HTTPS_PROXY`/`HTTP_PROXY` before running so that `pip` (for `reportlab`) and the Falcon API calls can reach the internet:
+
+```bash
+export HTTPS_PROXY=http://proxy.example.com:8080
+export HTTP_PROXY=$HTTPS_PROXY
 ```
 
 ## Configuration
