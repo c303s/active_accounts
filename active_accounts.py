@@ -145,7 +145,7 @@ def _collect_credentials(
 
     if existing_secret:
         entered = getpass.getpass(
-            "Enter FALCON_CLIENT_SECRET (leave blank to keep current): "
+            "FALCON_CLIENT_SECRET (leave blank to keep current): "
         ).strip()
         client_secret = entered or existing_secret
     else:
@@ -859,9 +859,6 @@ if probe_response["status_code"] != 200:
 if not tenant_label:
     tenant_label = resolve_tenant_label(identity_protection)
 
-tenant_name_for_progress = tenant_label or "Unavailable"
-spinner.update(f"Tenant name: {tenant_name_for_progress} | CID: {cid_value}")
-
 total_query = f'''
 query {{
   total: countEntities(
@@ -991,6 +988,8 @@ if not tenant_label:
 
 if not tenant_label:
     tenant_label = urlparse(base_url).netloc or base_url
+
+spinner.update(f"Tenant name: {tenant_label} | CID: {cid_value}")
 
 # Output
 
