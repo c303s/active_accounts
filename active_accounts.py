@@ -767,9 +767,6 @@ if cid_response["status_code"] == 200:
 if cid_value != "Unavailable":
     cid_value = cid_value.split("-")[0] if "-" in cid_value else cid_value[:-2]
 
-tenant_name_for_progress = tenant_label or urlparse(base_url).netloc or "Unavailable"
-spinner.update(f"Tenant name: {tenant_name_for_progress} | CID: {cid_value}")
-
 # 1. Sensor-installed endpoint count
 
 spinner.update("Counting protected endpoints")
@@ -861,6 +858,9 @@ if probe_response["status_code"] != 200:
 
 if not tenant_label:
     tenant_label = resolve_tenant_label(identity_protection)
+
+tenant_name_for_progress = tenant_label or "Unavailable"
+spinner.update(f"Tenant name: {tenant_name_for_progress} | CID: {cid_value}")
 
 total_query = f'''
 query {{
