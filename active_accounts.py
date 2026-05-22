@@ -240,17 +240,17 @@ def ensure_local_credentials() -> None:
             raise RuntimeError(
                 "Missing Falcon credentials. Run the script interactively once or create a local .env file."
             )
+        print("Make sure you have created a Falcon API client with these required scopes enabled:")
+        print("  - Hosts: Read")
+        print("  - Sensor Download: Read")
+        print("  - Identity Protection: Read")
+        print("  - GraphQL: Write")
         print(
             colorize(
                 "Could not find API client details. Please enter them below.",
                 ANSI_RED,
             )
         )
-        print("Make sure you have created a Falcon API client with these required scopes enabled:")
-        print("  - Hosts: Read")
-        print("  - Sensor Download: Read")
-        print("  - Identity Protection: Read")
-        print("  - GraphQL: Write")
 
     while True:
         client_id, client_secret, base_url = _collect_credentials(
