@@ -563,7 +563,7 @@ def write_pdf_report(
     chart_box_y = 348
     chart_box_height = 138
     chart_origin_x = 176
-    chart_origin_y = 348
+    chart_origin_y = 360
     chart_bar_height = 18
     chart_gap = 14
     chart_max_width = 290
