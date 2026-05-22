@@ -1,3 +1,5 @@
+Minimum required Falcon API scopes for this script:
+
 Hosts: Read
 Sensor Download: Read
 Identity Protection: Read

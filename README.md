@@ -1,15 +1,16 @@
 # CrowdStrike Falcon Tenant Report v0.01
 
-This repository contains a small Python script that connects to CrowdStrike Falcon and prints a terminal report with:
+This repository contains a small Python script that connects to CrowdStrike Falcon and produces a tenant summary in the terminal, CSV, and PDF.
+
+The report includes:
 
 - the tenant label and CID
 - the number of endpoints with an installed Falcon sensor
-- an endpoint-per-domain summary based on host machine domains
 - the number of active Identity Protection accounts seen in the last 90 days
 - a human, service, and admin split for those active identities
-- the Active Directory domains represented by those identities
+- Active Directory domains sorted by the highest number of active accounts first
 - a CSV export of the full report written after the terminal output completes
-- a PDF export of the same report summary
+- a styled PDF export with a summary section, active-accounts bar chart, and domain table
 
 The main script is `active_accounts.py`.
 
@@ -25,17 +26,21 @@ The script calls these Falcon REST APIs directly using only the Python standard 
 
 The script also generates the CSV and PDF outputs using only the Python standard library.
 
-Minimum API permissions:
+## Required Scopes
+
+The script currently validates and uses these minimum Falcon API scopes:
 
 - Hosts: Read
 - Sensor Download: Read
 - Identity Protection: Read
 - GraphQL: Write
 
+The same scope list is stored in `api_scopes.txt`.
+
 ## Requirements
 
 - Python 3.10 or newer (any system Python works; nothing else needed)
-- A CrowdStrike Falcon API client with the required scopes
+- A CrowdStrike Falcon API client with the scopes listed above
 
 The script uses only the Python standard library. Credentials are stored in a `.env` file next to `active_accounts.py`. Nothing is written under `~/Library/Application Support` or any other user-wide data directory, and no Python packages are installed at first run.
 
@@ -78,13 +83,6 @@ export HTTP_PROXY=$HTTPS_PROXY
 Create a local `.env` file manually, or let the script create it for you interactively on first run.
 
 If the script does not find `FALCON_CLIENT_ID`, `FALCON_CLIENT_SECRET`, or `FALCON_BASE_URL`, it starts an interactive setup wizard and writes them to a `.env` file next to `active_accounts.py` automatically after the pre-flight check succeeds.
-
-Before entering credentials, make sure a Falcon API client already exists with these scopes enabled:
-
-- `Hosts: Read`
-- `Sensor Download: Read`
-- `Identity Protection: Read`
-- `GraphQL: Write`
 
 Required variables:
 
@@ -149,35 +147,15 @@ PDF output             : ACME-Group-0123456789ABCDEF0123456789ABCDEF-08-05-2026.
 - The endpoint count is paginated and follows the cursor returned by the Hosts API.
 - The script verifies Identity Protection GraphQL access before running the more expensive queries.
 - Some API clients do not expose a tenant display name directly. In that case, the script tries to derive a tenant label from the discovered Active Directory domains before falling back to the Falcon base URL host name, unless `FALCON_TENANT_NAME` is set.
+- Active Directory domains are ordered by highest active-account total first, with alphabetical ordering used only to break ties.
 - The CSV export file name uses the structure `tenant-cid-dd-mm-yyyy.csv` and is written in the current working directory.
 - The PDF export uses the same base file name and renders a styled first page with the CrowdStrike header, key totals, an active-accounts bar chart sorted highest-first, and the Active Directory domain table.
 - If the domain table spans additional pages, continuation pages contain only the table so the repeated report title and CID do not clutter the layout.
 - If you place a local file named `crowdstrike-logo.png` next to the script, it will be embedded in the PDF header automatically.
 - Do not commit real credentials to GitHub.
 
-## Publish To GitHub
-
-This workspace is not automatically published by the script. To publish this repository from the repository root:
-
-```bash
-git init
-git add README.md .gitignore active_accounts.py install.sh api_scopes.txt
-git commit -m "Initial commit"
-git branch -M main
-git remote add origin https://github.com/YOUR-USERNAME/YOUR-REPOSITORY.git
-git push -u origin main
-```
-
-If the repository already exists:
-
-```bash
-git add README.md .gitignore active_accounts.py install.sh api_scopes.txt
-git commit -m "Add documentation and setup instructions"
-git push
-```
-
 ## Security
 
 - Keep `.env` local only.
 - Rotate any credential that has already been stored in the repository or pasted into public history.
-- Use the minimum scope set listed in `api_scopes.txt` for this script.
+- Use only the minimum scope set listed above and in `api_scopes.txt`.
