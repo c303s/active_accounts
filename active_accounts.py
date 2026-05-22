@@ -248,7 +248,7 @@ def ensure_local_credentials() -> None:
         print()
         print(
             colorize(
-                "Could not find API client details. Please enter them below.",
+                "Could not find API client details.",
                 ANSI_RED,
             )
         )
