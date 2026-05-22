@@ -525,15 +525,16 @@ def write_pdf_report(
     header_height = 104
     commands.append(_pdf_fill_rect(36, header_y, 523, header_height, light_bg))
     commands.append(_pdf_stroke_rect(36, header_y, 523, header_height, gray, 1.0))
-    commands.append(_pdf_text(52, 782, f"CrowdStrike Falcon Tenant Report v{APP_VERSION}", font="F2", size=20, hex_color=red))
-    commands.append(_pdf_text(52, 750, f"Tenant: {tenant_label}", font="F2", size=10, hex_color=dark))
-    commands.append(_pdf_text(52, 730, f"CID: {cid_value}", size=10, hex_color=dark))
-    commands.append(_pdf_text(52, 710, f"Generated: {current_timestamp}", size=10, hex_color=dark))
+    commands.append(_pdf_text(52, 782, "CrowdStrike Falcon Tenant Report", font="F2", size=18, hex_color=red))
+    commands.append(_pdf_text(52, 762, f"Version {APP_VERSION}", font="F2", size=10, hex_color=mid))
+    commands.append(_pdf_text(52, 740, f"Tenant: {tenant_label}", font="F2", size=10, hex_color=dark))
+    commands.append(_pdf_text(52, 722, f"CID: {cid_value}", size=10, hex_color=dark))
+    commands.append(_pdf_text(52, 704, f"Generated: {current_timestamp}", size=10, hex_color=dark))
 
     image_name = None
     if logo_image:
         image_name = "Im1"
-        max_width = 132
+        max_width = 116
         max_height = 28
         image_width = int(logo_image["width"])
         image_height = int(logo_image["height"])
@@ -544,8 +545,8 @@ def write_pdf_report(
         y = 782 - draw_height / 2
         commands.append(f"q {draw_width:.2f} 0 0 {draw_height:.2f} {x:.2f} {y:.2f} cm /{image_name} Do Q")
     else:
-        commands.append(_pdf_fill_rect(419, 765, 124, 30, red))
-        commands.append(_pdf_text(433, 776, "CROWDSTRIKE", font="F2", size=12, hex_color=white))
+        commands.append(_pdf_fill_rect(427, 765, 116, 30, red))
+        commands.append(_pdf_text(440, 776, "CROWDSTRIKE", font="F2", size=12, hex_color=white))
 
     summary_y = 654
     row_height = 22
@@ -559,10 +560,10 @@ def write_pdf_report(
         commands.append(_pdf_text(table_x + 8, y + 8, label, font="F2", size=10, hex_color=white))
         commands.append(_pdf_text(table_x + label_width + 8, y + 8, value, font="F2", size=10, hex_color=dark))
 
-    chart_box_y = 394
-    chart_box_height = 126
+    chart_box_y = 390
+    chart_box_height = 130
     chart_origin_x = 176
-    chart_origin_y = 418
+    chart_origin_y = 390
     chart_bar_height = 18
     chart_gap = 14
     chart_max_width = 290
@@ -570,8 +571,8 @@ def write_pdf_report(
 
     commands.append(_pdf_fill_rect(36, chart_box_y, 523, chart_box_height, white))
     commands.append(_pdf_stroke_rect(36, chart_box_y, 523, chart_box_height, gray, 0.8))
-    commands.append(_pdf_text(52, 500, "Active Accounts", font="F2", size=12, hex_color=dark))
-    commands.append(_pdf_text(52, 484, "Bar chart sorted by highest account count first.", size=9, hex_color=mid))
+    commands.append(_pdf_text(52, 502, "Active Accounts", font="F2", size=12, hex_color=dark))
+    commands.append(_pdf_text(52, 486, "Bar chart sorted by highest account count first.", size=9, hex_color=mid))
 
     for index, (label, value) in enumerate(chart_rows):
         y = chart_origin_y + (2 - index) * (chart_bar_height + chart_gap)
@@ -582,10 +583,10 @@ def write_pdf_report(
         commands.append(_pdf_stroke_rect(chart_origin_x, y, chart_max_width, chart_bar_height, gray, 0.6))
         commands.append(_pdf_text(chart_origin_x + chart_max_width + 10, y + 4, str(value), font="F2", size=10, hex_color=dark))
 
-    commands.append(_pdf_line(52, 386, 543, 386, gray, 0.8))
-    commands.append(_pdf_text(36, 362, "Active Directory Domains", font="F2", size=12, hex_color=dark))
+    commands.append(_pdf_line(52, 382, 543, 382, gray, 0.8))
+    commands.append(_pdf_text(36, 358, "Active Directory Domains", font="F2", size=12, hex_color=dark))
 
-    table_start_y = 332
+    table_start_y = 328
     header_row_height = 22
     body_height = 18
 
@@ -945,17 +946,22 @@ class Spinner:
         self._thread = None
         self._enabled = sys.stdout.isatty()
         self._message_lock = threading.Lock()
-        self._printed_messages = set()
+        self._rendered_width = 0
+
+    def _clear_line_locked(self) -> None:
+        if self._rendered_width <= 0:
+            return
+        sys.stdout.write("\r" + " " * self._rendered_width + "\r")
+        self._rendered_width = 0
 
     def update(self, message: str) -> None:
         with self._message_lock:
+            if self._enabled and self._active:
+                self._clear_line_locked()
             self.message = message
-            if self._enabled and message not in self._printed_messages:
-                if self._active:
-                    sys.stdout.write("\r" + " " * (len(self.message) + 4) + "\r")
+            if self._enabled and not self._active:
                 sys.stdout.write(f"{message}\n")
                 sys.stdout.flush()
-                self._printed_messages.add(message)
 
     def start(self) -> None:
         if not self._enabled:
@@ -974,7 +980,7 @@ class Spinner:
             self._thread.join()
             self._thread = None
         with self._message_lock:
-            sys.stdout.write("\r" + " " * (len(self.message) + 4) + "\r")
+            self._clear_line_locked()
         sys.stdout.flush()
 
     def _spin(self) -> None:
@@ -982,7 +988,9 @@ class Spinner:
             if not self._active:
                 break
             with self._message_lock:
-                sys.stdout.write(f"\r{self.message} {frame}")
+                rendered = f"{self.message} {frame}"
+                self._rendered_width = max(self._rendered_width, len(rendered))
+                sys.stdout.write(f"\r{rendered}")
                 sys.stdout.flush()
             time.sleep(0.1)
 
@@ -1301,7 +1309,7 @@ for domain in active_directory_domains:
         }
     )
 
-domain_rows.sort(key=lambda row: str(row["domain"]).lower())
+domain_rows.sort(key=lambda row: (-int(row["total"]), str(row["domain"]).lower()))
 
 for row in domain_rows:
     print(
