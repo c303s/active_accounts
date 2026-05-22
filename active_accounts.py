@@ -521,15 +521,15 @@ def write_pdf_report(
     page_commands: list[str] = []
     commands: list[str] = []
 
-    header_y = 664
-    header_height = 146
+    header_y = 648
+    header_height = 162
     commands.append(_pdf_fill_rect(36, header_y, 523, header_height, light_bg))
     commands.append(_pdf_stroke_rect(36, header_y, 523, header_height, gray, 1.0))
     commands.append(_pdf_text(52, 772, "CrowdStrike Falcon Tenant Report", font="F2", size=18, hex_color=red))
-    commands.append(_pdf_text(52, 744, f"Version {APP_VERSION}", font="F2", size=10, hex_color=mid))
-    commands.append(_pdf_text(52, 714, f"Tenant: {tenant_label}", font="F2", size=10, hex_color=dark))
-    commands.append(_pdf_text(52, 690, f"CID: {cid_value}", size=10, hex_color=dark))
-    commands.append(_pdf_text(52, 668, f"Generated: {current_timestamp}", size=10, hex_color=dark))
+    commands.append(_pdf_text(52, 740, f"Version {APP_VERSION}", font="F2", size=10, hex_color=mid))
+    commands.append(_pdf_text(52, 706, f"Tenant: {tenant_label}", font="F2", size=10, hex_color=dark))
+    commands.append(_pdf_text(52, 680, f"CID: {cid_value}", size=10, hex_color=dark))
+    commands.append(_pdf_text(52, 656, f"Generated: {current_timestamp}", size=10, hex_color=dark))
 
     image_name = None
     if logo_image:
@@ -548,7 +548,7 @@ def write_pdf_report(
         commands.append(_pdf_fill_rect(427, 765, 116, 30, red))
         commands.append(_pdf_text(440, 776, "CROWDSTRIKE", font="F2", size=12, hex_color=white))
 
-    summary_y = 632
+    summary_y = 604
     row_height = 22
     label_width = 170
     value_width = 335
@@ -560,10 +560,10 @@ def write_pdf_report(
         commands.append(_pdf_text(table_x + 8, y + 8, label, font="F2", size=10, hex_color=white))
         commands.append(_pdf_text(table_x + label_width + 8, y + 8, value, font="F2", size=10, hex_color=dark))
 
-    chart_box_y = 382
-    chart_box_height = 134
+    chart_box_y = 348
+    chart_box_height = 138
     chart_origin_x = 176
-    chart_origin_y = 382
+    chart_origin_y = 348
     chart_bar_height = 18
     chart_gap = 14
     chart_max_width = 290
@@ -571,7 +571,7 @@ def write_pdf_report(
 
     commands.append(_pdf_fill_rect(36, chart_box_y, 523, chart_box_height, white))
     commands.append(_pdf_stroke_rect(36, chart_box_y, 523, chart_box_height, gray, 0.8))
-    commands.append(_pdf_text(52, 494, "Active Accounts", font="F2", size=12, hex_color=dark))
+    commands.append(_pdf_text(52, 470, "Active Accounts", font="F2", size=12, hex_color=dark))
 
     for index, (label, value) in enumerate(chart_rows):
         y = chart_origin_y + (2 - index) * (chart_bar_height + chart_gap)
@@ -582,10 +582,10 @@ def write_pdf_report(
         commands.append(_pdf_stroke_rect(chart_origin_x, y, chart_max_width, chart_bar_height, gray, 0.6))
         commands.append(_pdf_text(chart_origin_x + chart_max_width + 10, y + 4, str(value), font="F2", size=10, hex_color=dark))
 
-    commands.append(_pdf_line(52, 374, 543, 374, gray, 0.8))
-    commands.append(_pdf_text(36, 350, "Active Directory Domains", font="F2", size=12, hex_color=dark))
+    commands.append(_pdf_line(52, 330, 543, 330, gray, 0.8))
+    commands.append(_pdf_text(36, 306, "Active Directory Domains", font="F2", size=12, hex_color=dark))
 
-    table_start_y = 320
+    table_start_y = 276
     header_row_height = 22
     body_height = 18
 
