@@ -245,6 +245,7 @@ def ensure_local_credentials() -> None:
         print("  - Sensor Download: Read")
         print("  - Identity Protection: Read")
         print("  - GraphQL: Write")
+        print()
         print(
             colorize(
                 "Could not find API client details. Please enter them below.",
