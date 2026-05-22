@@ -357,6 +357,11 @@ def _pdf_text(x: float, y: float, text: str, *, font: str = "F1", size: int = 11
     )
 
 
+def _pdf_line(x1: float, y1: float, x2: float, y2: float, hex_color: str, line_width: float = 1.0) -> str:
+    red, green, blue = _pdf_rgb(hex_color)
+    return f"q {line_width:.2f} w {red:.3f} {green:.3f} {blue:.3f} RG {x1:.2f} {y1:.2f} m {x2:.2f} {y2:.2f} l S Q"
+
+
 def _png_paeth(left: int, up: int, up_left: int) -> int:
     predictor = left + up - up_left
     left_distance = abs(predictor - left)
@@ -472,6 +477,7 @@ def write_pdf_report(
 ) -> None:
     light_bg = "#F1F1F1"
     gray = "#D9D9D9"
+    mid = "#7A7A7A"
     dark = "#1A1A1A"
     red = "#E01E26"
     white = "#FFFFFF"
@@ -483,6 +489,15 @@ def write_pdf_report(
         ("Admin accounts", f"{category_counts['admin']}"),
         ("Total active accounts", f"{total_active_accounts} ({human_percentage:.2f}% human)"),
     ]
+
+    chart_rows = sorted(
+        [
+            ("Human", category_counts["human"]),
+            ("Service", category_counts["service"]),
+            ("Admin", category_counts["admin"]),
+        ],
+        key=lambda item: (-item[1], item[0]),
+    )
 
     domain_table_rows = [
         [
@@ -501,38 +516,39 @@ def write_pdf_report(
     page_height = 842
     margin = 36
     table_x = margin
-    table_width = page_width - margin * 2
     domain_col_widths = [220, 55, 50, 50, 60, 50]
 
     page_commands: list[str] = []
     commands: list[str] = []
 
-    commands.append(_pdf_fill_rect(36, 728, 523, 82, light_bg))
-    commands.append(_pdf_stroke_rect(36, 728, 523, 82, gray, 1.0))
+    header_y = 706
+    header_height = 104
+    commands.append(_pdf_fill_rect(36, header_y, 523, header_height, light_bg))
+    commands.append(_pdf_stroke_rect(36, header_y, 523, header_height, gray, 1.0))
     commands.append(_pdf_text(52, 782, f"CrowdStrike Falcon Tenant Report v{APP_VERSION}", font="F2", size=20, hex_color=red))
-    commands.append(_pdf_text(52, 760, f"Tenant: {tenant_label}", size=10, hex_color=dark))
-    commands.append(_pdf_text(52, 744, f"CID: {cid_value}", size=10, hex_color=dark))
-    commands.append(_pdf_text(180, 744, f"Generated: {current_timestamp}", size=10, hex_color=dark))
+    commands.append(_pdf_text(52, 750, f"Tenant: {tenant_label}", font="F2", size=10, hex_color=dark))
+    commands.append(_pdf_text(52, 730, f"CID: {cid_value}", size=10, hex_color=dark))
+    commands.append(_pdf_text(52, 710, f"Generated: {current_timestamp}", size=10, hex_color=dark))
 
     image_name = None
     if logo_image:
         image_name = "Im1"
-        max_width = 120
-        max_height = 34
+        max_width = 132
+        max_height = 28
         image_width = int(logo_image["width"])
         image_height = int(logo_image["height"])
         scale = min(max_width / image_width, max_height / image_height)
         draw_width = image_width * scale
         draw_height = image_height * scale
-        x = 559 - 16 - draw_width
-        y = 769 - draw_height / 2
+        x = 541 - draw_width
+        y = 782 - draw_height / 2
         commands.append(f"q {draw_width:.2f} 0 0 {draw_height:.2f} {x:.2f} {y:.2f} cm /{image_name} Do Q")
     else:
-        commands.append(_pdf_fill_rect(433, 748, 110, 30, red))
-        commands.append(_pdf_text(447, 759, "CROWDSTRIKE", font="F2", size=12, hex_color=white))
+        commands.append(_pdf_fill_rect(419, 765, 124, 30, red))
+        commands.append(_pdf_text(433, 776, "CROWDSTRIKE", font="F2", size=12, hex_color=white))
 
-    summary_y = 675
-    row_height = 24
+    summary_y = 654
+    row_height = 22
     label_width = 170
     value_width = 335
     for index, (label, value) in enumerate(summary_rows):
@@ -543,18 +559,42 @@ def write_pdf_report(
         commands.append(_pdf_text(table_x + 8, y + 8, label, font="F2", size=10, hex_color=white))
         commands.append(_pdf_text(table_x + label_width + 8, y + 8, value, font="F2", size=10, hex_color=dark))
 
-    commands.append(_pdf_text(36, 522, "Active Directory Domains", font="F2", size=12, hex_color=dark))
+    chart_box_y = 394
+    chart_box_height = 126
+    chart_origin_x = 176
+    chart_origin_y = 418
+    chart_bar_height = 18
+    chart_gap = 14
+    chart_max_width = 290
+    max_chart_value = max((value for _, value in chart_rows), default=0)
 
-    table_start_y = 492
-    header_height = 22
+    commands.append(_pdf_fill_rect(36, chart_box_y, 523, chart_box_height, white))
+    commands.append(_pdf_stroke_rect(36, chart_box_y, 523, chart_box_height, gray, 0.8))
+    commands.append(_pdf_text(52, 500, "Active Accounts", font="F2", size=12, hex_color=dark))
+    commands.append(_pdf_text(52, 484, "Bar chart sorted by highest account count first.", size=9, hex_color=mid))
+
+    for index, (label, value) in enumerate(chart_rows):
+        y = chart_origin_y + (2 - index) * (chart_bar_height + chart_gap)
+        bar_width = (value / max_chart_value * chart_max_width) if max_chart_value else 0
+        commands.append(_pdf_text(52, y + 4, label, font="F2", size=10, hex_color=dark))
+        commands.append(_pdf_fill_rect(chart_origin_x, y, chart_max_width, chart_bar_height, light_bg))
+        commands.append(_pdf_fill_rect(chart_origin_x, y, bar_width, chart_bar_height, red))
+        commands.append(_pdf_stroke_rect(chart_origin_x, y, chart_max_width, chart_bar_height, gray, 0.6))
+        commands.append(_pdf_text(chart_origin_x + chart_max_width + 10, y + 4, str(value), font="F2", size=10, hex_color=dark))
+
+    commands.append(_pdf_line(52, 386, 543, 386, gray, 0.8))
+    commands.append(_pdf_text(36, 362, "Active Directory Domains", font="F2", size=12, hex_color=dark))
+
+    table_start_y = 332
+    header_row_height = 22
     body_height = 18
 
     def add_domain_table_header(target: list[str], y: float) -> None:
         labels = ["Domain", "Endpoints", "Total", "Human", "Service", "Admin"]
         current_x = table_x
         for label, width in zip(labels, domain_col_widths):
-            target.append(_pdf_fill_rect(current_x, y, width, header_height, red))
-            target.append(_pdf_stroke_rect(current_x, y, width, header_height, gray, 0.6))
+            target.append(_pdf_fill_rect(current_x, y, width, header_row_height, red))
+            target.append(_pdf_stroke_rect(current_x, y, width, header_row_height, gray, 0.6))
             target.append(_pdf_text(current_x + 6, y + 7, label, font="F2", size=9, hex_color=white))
             current_x += width
 
@@ -581,12 +621,10 @@ def write_pdf_report(
     rows_per_other_page = 38
     while remaining_rows:
         commands = []
-        commands.append(_pdf_text(36, 794, f"CrowdStrike Falcon Tenant Report | {tenant_label}", font="F2", size=16, hex_color=red))
-        commands.append(_pdf_text(36, 776, f"CID: {cid_value}", size=10, hex_color=dark))
-        add_domain_table_header(commands, 740)
+        add_domain_table_header(commands, 780)
         page_rows = remaining_rows[:rows_per_other_page]
         remaining_rows = remaining_rows[rows_per_other_page:]
-        add_domain_rows(commands, page_rows, 740)
+        add_domain_rows(commands, page_rows, 780)
         page_commands.append("\n".join(commands))
 
     if not page_commands:
