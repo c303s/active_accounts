@@ -41,6 +41,9 @@ APP_VERSION = "0.01"
 DEFAULT_BASE_URL = "https://api.eu-1.crowdstrike.com"
 ENV_PATH = Path(SCRIPT_DIR) / ".env"
 LOGO_PATH = Path(SCRIPT_DIR) / "crowdstrike-logo.png"
+ANSI_RED = "\033[31m"
+ANSI_GREEN = "\033[32m"
+ANSI_RESET = "\033[0m"
 
 
 def read_env_file(path: Path) -> dict[str, str]:
@@ -99,9 +102,9 @@ def prompt_env_value(
     while True:
         prompt_suffix = f" [{default}]" if default else ""
         if secret:
-            value = getpass.getpass(f"{prompt_text}{prompt_suffix}: ").strip()
+            value = getpass.getpass(f"Enter {prompt_text}{prompt_suffix}: ").strip()
         else:
-            value = input(f"{prompt_text}{prompt_suffix}: ").strip()
+            value = input(f"Enter {prompt_text}{prompt_suffix}: ").strip()
 
         if not value and default is not None:
             return default
@@ -142,7 +145,7 @@ def _collect_credentials(
 
     if existing_secret:
         entered = getpass.getpass(
-            "FALCON_CLIENT_SECRET [leave blank to keep current]: "
+            "Enter FALCON_CLIENT_SECRET (leave blank to keep current): "
         ).strip()
         client_secret = entered or existing_secret
     else:
@@ -166,6 +169,12 @@ def print_startup_banner() -> None:
     print("Connects to CrowdStrike Falcon, validates API access, and generates tenant summary reports.")
     print(f"Version {APP_VERSION}. This is not an offical CrowdStrike tool.")
     print()
+
+
+def colorize(message: str, color: str) -> str:
+    if not sys.stdout.isatty():
+        return message
+    return f"{color}{message}{ANSI_RESET}"
 
 
 def _preflight_credentials(client_id: str, client_secret: str, base_url: str) -> tuple[bool, str]:
@@ -219,7 +228,7 @@ def ensure_local_credentials() -> None:
         if not _prompt_yes_no("Update these credentials?", default=False):
             ok, message = _preflight_credentials(client_id, client_secret, base_url)
             if ok:
-                print("Running pre-flight check: successful.")
+                print(colorize("Running pre-flight check: successful.", ANSI_GREEN))
                 return
 
             print("Running pre-flight check: failed.")
@@ -231,8 +240,13 @@ def ensure_local_credentials() -> None:
             raise RuntimeError(
                 "Missing Falcon credentials. Run the script interactively once or create a local .env file."
             )
-        print(f"Falcon API credentials are missing. Let's create {ENV_PATH}.")
-        print("Before continuing, create a Falcon API client with these scopes enabled:")
+        print(
+            colorize(
+                f"Could not find API client details in {ENV_PATH}. Please enter them below.",
+                ANSI_RED,
+            )
+        )
+        print("Make sure you have created a Falcon API client with these required scopes enabled:")
         print("  - Hosts: Read")
         print("  - Sensor Download: Read")
         print("  - Identity Protection: Read")
@@ -244,7 +258,7 @@ def ensure_local_credentials() -> None:
         )
         ok, message = _preflight_credentials(client_id, client_secret, base_url)
         if ok:
-            print("Running pre-flight check: successful.")
+            print(colorize("Running pre-flight check: successful.", ANSI_GREEN))
             break
 
         print("Running pre-flight check: failed.")
@@ -261,7 +275,7 @@ def ensure_local_credentials() -> None:
     os.environ["FALCON_CLIENT_SECRET"] = client_secret
     os.environ["FALCON_BASE_URL"] = base_url
 
-    print(f"Saved credentials to {ENV_PATH}.")
+    print("Saved API client key details.")
 
 
 def derive_tenant_label_from_domains(domains: set[str]) -> str | None:
