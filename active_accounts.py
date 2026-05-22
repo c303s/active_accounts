@@ -472,7 +472,7 @@ def write_pdf_report(
     total_endpoints: int,
     category_counts: dict[str, int],
     total_active_accounts: int,
-    human_percentage: float,
+    account_percentages: dict[str, float],
     domain_rows: list[dict[str, int | str]],
 ) -> None:
     light_bg = "#F1F1F1"
@@ -484,10 +484,10 @@ def write_pdf_report(
 
     summary_rows = [
         ("Protected endpoints", f"{total_endpoints}"),
-        ("Human accounts", f"{category_counts['human']}"),
-        ("Service accounts", f"{category_counts['service']}"),
-        ("Admin accounts", f"{category_counts['admin']}"),
-        ("Total active accounts", f"{total_active_accounts} ({human_percentage:.2f}% human)"),
+        ("Human accounts", f"{category_counts['human']} ({account_percentages['human']:.2f}%)"),
+        ("Service accounts", f"{category_counts['service']} ({account_percentages['service']:.2f}%)"),
+        ("Admin accounts", f"{category_counts['admin']} ({account_percentages['admin']:.2f}%)"),
+        ("Total active accounts", f"{total_active_accounts}"),
     ]
 
     chart_rows = sorted(
@@ -1269,7 +1269,10 @@ category_counts["human"] = max(
     0, verified_total - category_counts["service"] - category_counts["admin"]
 )
 total_active_accounts = sum(category_counts.values())
-human_percentage = (category_counts["human"] / total_active_accounts * 100) if total_active_accounts else 0
+account_percentages = {
+    category: ((count / total_active_accounts) * 100) if total_active_accounts else 0
+    for category, count in category_counts.items()
+}
 
 if not tenant_label:
     tenant_label = derive_tenant_label_from_domains(active_directory_domains)
@@ -1300,10 +1303,10 @@ print()
 print(f"Endpoints with an installed CrowdStrike sensor : {total_endpoints}")
 print()
 print("Identity Protection accounts used in the last 90 days")
-print(f"  Human accounts         : {category_counts['human']}")
-print(f"  Service accounts       : {category_counts['service']}")
-print(f"  Admin accounts         : {category_counts['admin']}")
-print(f"  Total active accounts  : {total_active_accounts} ({human_percentage:.2f}% human)")
+print(f"  Human accounts         : {category_counts['human']} ({account_percentages['human']:.2f}%)")
+print(f"  Service accounts       : {category_counts['service']} ({account_percentages['service']:.2f}%)")
+print(f"  Admin accounts         : {category_counts['admin']} ({account_percentages['admin']:.2f}%)")
+print(f"  Total active accounts  : {total_active_accounts}")
 print()
 print(f"Active Directory domains : {len(active_directory_domains)}")
 domain_rows = []
@@ -1346,7 +1349,9 @@ with open(csv_filename, "w", newline="", encoding="utf-8") as csv_file:
     writer.writerow(["summary", "service_accounts", category_counts["service"], "", "", "", "", "", ""])
     writer.writerow(["summary", "admin_accounts", category_counts["admin"], "", "", "", "", "", ""])
     writer.writerow(["summary", "total_active_accounts", total_active_accounts, "", "", "", "", "", ""])
-    writer.writerow(["summary", "human_percentage", f"{human_percentage:.2f}", "", "", "", "", "", ""])
+    writer.writerow(["summary", "human_percentage", f"{account_percentages['human']:.2f}", "", "", "", "", "", ""])
+    writer.writerow(["summary", "service_percentage", f"{account_percentages['service']:.2f}", "", "", "", "", "", ""])
+    writer.writerow(["summary", "admin_percentage", f"{account_percentages['admin']:.2f}", "", "", "", "", "", ""])
 
     for row in domain_rows:
         writer.writerow(
@@ -1371,7 +1376,7 @@ write_pdf_report(
     total_endpoints,
     category_counts,
     total_active_accounts,
-    human_percentage,
+    account_percentages,
     domain_rows,
 )
 
