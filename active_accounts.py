@@ -21,9 +21,11 @@ import json
 import csv
 import getpass
 import ssl
+import struct
 import subprocess
 import threading
 import time
+import zlib
 from datetime import datetime, timedelta, timezone
 from itertools import cycle
 from pathlib import Path
@@ -324,6 +326,139 @@ def sanitize_filename_component(value: str) -> str:
     return collapsed or "unknown"
 
 
+def _escape_pdf_text(value: str) -> str:
+    sanitized = value.encode("latin-1", "replace").decode("latin-1")
+    return sanitized.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+
+def _pdf_rgb(hex_color: str) -> tuple[float, float, float]:
+    value = hex_color.lstrip("#")
+    return tuple(int(value[index:index + 2], 16) / 255 for index in (0, 2, 4))
+
+
+def _pdf_fill_rect(x: float, y: float, width: float, height: float, hex_color: str) -> str:
+    red, green, blue = _pdf_rgb(hex_color)
+    return f"q {red:.3f} {green:.3f} {blue:.3f} rg {x:.2f} {y:.2f} {width:.2f} {height:.2f} re f Q"
+
+
+def _pdf_stroke_rect(x: float, y: float, width: float, height: float, hex_color: str, line_width: float = 1.0) -> str:
+    red, green, blue = _pdf_rgb(hex_color)
+    return f"q {line_width:.2f} w {red:.3f} {green:.3f} {blue:.3f} RG {x:.2f} {y:.2f} {width:.2f} {height:.2f} re S Q"
+
+
+def _pdf_text(x: float, y: float, text: str, *, font: str = "F1", size: int = 11, hex_color: str = "#1A1A1A") -> str:
+    red, green, blue = _pdf_rgb(hex_color)
+    return (
+        "BT "
+        f"/{font} {size} Tf "
+        f"{red:.3f} {green:.3f} {blue:.3f} rg "
+        f"1 0 0 1 {x:.2f} {y:.2f} Tm "
+        f"({_escape_pdf_text(text)}) Tj ET"
+    )
+
+
+def _png_paeth(left: int, up: int, up_left: int) -> int:
+    predictor = left + up - up_left
+    left_distance = abs(predictor - left)
+    up_distance = abs(predictor - up)
+    up_left_distance = abs(predictor - up_left)
+    if left_distance <= up_distance and left_distance <= up_left_distance:
+        return left
+    if up_distance <= up_left_distance:
+        return up
+    return up_left
+
+
+def _load_png_for_pdf(path: Path) -> dict[str, int | bytes] | None:
+    if not path.exists():
+        return None
+
+    payload = path.read_bytes()
+    if payload[:8] != b"\x89PNG\r\n\x1a\n":
+        return None
+
+    offset = 8
+    width = height = bit_depth = color_type = interlace = 0
+    idat_parts: list[bytes] = []
+
+    while offset + 8 <= len(payload):
+        chunk_length = struct.unpack(">I", payload[offset:offset + 4])[0]
+        chunk_type = payload[offset + 4:offset + 8]
+        chunk_data_start = offset + 8
+        chunk_data_end = chunk_data_start + chunk_length
+        chunk_data = payload[chunk_data_start:chunk_data_end]
+        offset = chunk_data_end + 4
+
+        if chunk_type == b"IHDR":
+            width, height, bit_depth, color_type, _, _, interlace = struct.unpack(">IIBBBBB", chunk_data)
+        elif chunk_type == b"IDAT":
+            idat_parts.append(chunk_data)
+        elif chunk_type == b"IEND":
+            break
+
+    if not width or not height or bit_depth != 8 or interlace != 0 or color_type not in (2, 6):
+        return None
+
+    channels = 3 if color_type == 2 else 4
+    stride = width * channels
+    decompressed = zlib.decompress(b"".join(idat_parts))
+    row_length = stride + 1
+    expected_length = row_length * height
+    if len(decompressed) != expected_length:
+        return None
+
+    rows: list[bytes] = []
+    previous = bytearray(stride)
+
+    for row_index in range(height):
+        start = row_index * row_length
+        filter_type = decompressed[start]
+        current = bytearray(decompressed[start + 1:start + row_length])
+
+        for index in range(stride):
+            left = current[index - channels] if index >= channels else 0
+            up = previous[index]
+            up_left = previous[index - channels] if index >= channels else 0
+
+            if filter_type == 0:
+                pass
+            elif filter_type == 1:
+                current[index] = (current[index] + left) & 0xFF
+            elif filter_type == 2:
+                current[index] = (current[index] + up) & 0xFF
+            elif filter_type == 3:
+                current[index] = (current[index] + ((left + up) // 2)) & 0xFF
+            elif filter_type == 4:
+                current[index] = (current[index] + _png_paeth(left, up, up_left)) & 0xFF
+            else:
+                return None
+
+        previous = current
+        rows.append(bytes(current))
+
+    rgb_bytes = bytearray()
+    if color_type == 2:
+        for row in rows:
+            rgb_bytes.extend(row)
+    else:
+        for row in rows:
+            for index in range(0, len(row), 4):
+                red, green, blue, alpha = row[index:index + 4]
+                rgb_bytes.extend(
+                    (
+                        (red * alpha + 255 * (255 - alpha)) // 255,
+                        (green * alpha + 255 * (255 - alpha)) // 255,
+                        (blue * alpha + 255 * (255 - alpha)) // 255,
+                    )
+                )
+
+    return {
+        "width": width,
+        "height": height,
+        "data": zlib.compress(bytes(rgb_bytes)),
+    }
+
+
 def write_pdf_report(
     pdf_path: str,
     tenant_label: str,
@@ -335,77 +470,171 @@ def write_pdf_report(
     human_percentage: float,
     domain_rows: list[dict[str, int | str]],
 ) -> None:
-    lines = [
-        f"CrowdStrike Falcon Tenant Report v{APP_VERSION}",
-        "",
-        f"Tenant: {tenant_label}",
-        f"CID: {cid_value}",
-        f"Generated: {current_timestamp}",
-        "",
-        f"Protected endpoints: {total_endpoints}",
-        f"Human accounts: {category_counts['human']}",
-        f"Service accounts: {category_counts['service']}",
-        f"Admin accounts: {category_counts['admin']}",
-        f"Total active accounts: {total_active_accounts} ({human_percentage:.2f}% human)",
-        "",
-        "Active Directory Domains",
+    light_bg = "#F1F1F1"
+    gray = "#D9D9D9"
+    dark = "#1A1A1A"
+    red = "#E01E26"
+    white = "#FFFFFF"
+
+    summary_rows = [
+        ("Protected endpoints", f"{total_endpoints}"),
+        ("Human accounts", f"{category_counts['human']}"),
+        ("Service accounts", f"{category_counts['service']}"),
+        ("Admin accounts", f"{category_counts['admin']}"),
+        ("Total active accounts", f"{total_active_accounts} ({human_percentage:.2f}% human)"),
     ]
 
-    if domain_rows:
-        for row in domain_rows:
-            lines.append(
-                f"- {row['domain']} | Endpoints: {row['endpoints']} | Total: {row['total']} | "
-                f"Human: {row['human']} | Service: {row['service']} | Admin: {row['admin']}"
-            )
+    domain_table_rows = [
+        [
+            str(row["domain"]),
+            str(row["endpoints"]),
+            str(row["total"]),
+            str(row["human"]),
+            str(row["service"]),
+            str(row["admin"]),
+        ]
+        for row in domain_rows
+    ] or [["No domains found", "-", "-", "-", "-", "-"]]
+
+    logo_image = _load_png_for_pdf(LOGO_PATH)
+    page_width = 595
+    page_height = 842
+    margin = 36
+    table_x = margin
+    table_width = page_width - margin * 2
+    domain_col_widths = [220, 55, 50, 50, 60, 50]
+
+    page_commands: list[str] = []
+    commands: list[str] = []
+
+    commands.append(_pdf_fill_rect(36, 728, 523, 82, light_bg))
+    commands.append(_pdf_stroke_rect(36, 728, 523, 82, gray, 1.0))
+    commands.append(_pdf_text(52, 782, f"CrowdStrike Falcon Tenant Report v{APP_VERSION}", font="F2", size=20, hex_color=red))
+    commands.append(_pdf_text(52, 760, f"Tenant: {tenant_label}", size=10, hex_color=dark))
+    commands.append(_pdf_text(52, 744, f"CID: {cid_value}", size=10, hex_color=dark))
+    commands.append(_pdf_text(180, 744, f"Generated: {current_timestamp}", size=10, hex_color=dark))
+
+    image_name = None
+    if logo_image:
+        image_name = "Im1"
+        max_width = 120
+        max_height = 34
+        image_width = int(logo_image["width"])
+        image_height = int(logo_image["height"])
+        scale = min(max_width / image_width, max_height / image_height)
+        draw_width = image_width * scale
+        draw_height = image_height * scale
+        x = 559 - 16 - draw_width
+        y = 769 - draw_height / 2
+        commands.append(f"q {draw_width:.2f} 0 0 {draw_height:.2f} {x:.2f} {y:.2f} cm /{image_name} Do Q")
     else:
-        lines.append("- No Active Directory domains were found.")
+        commands.append(_pdf_fill_rect(433, 748, 110, 30, red))
+        commands.append(_pdf_text(447, 759, "CROWDSTRIKE", font="F2", size=12, hex_color=white))
 
-    max_lines_per_page = 44
-    pages = [lines[index:index + max_lines_per_page] for index in range(0, len(lines), max_lines_per_page)]
-    if not pages:
-        pages = [["CrowdStrike Falcon Tenant Report"]]
+    summary_y = 675
+    row_height = 24
+    label_width = 170
+    value_width = 335
+    for index, (label, value) in enumerate(summary_rows):
+        y = summary_y - index * row_height
+        commands.append(_pdf_fill_rect(table_x, y, label_width, row_height, dark))
+        commands.append(_pdf_fill_rect(table_x + label_width, y, value_width, row_height, white))
+        commands.append(_pdf_stroke_rect(table_x, y, label_width + value_width, row_height, gray, 0.7))
+        commands.append(_pdf_text(table_x + 8, y + 8, label, font="F2", size=10, hex_color=white))
+        commands.append(_pdf_text(table_x + label_width + 8, y + 8, value, font="F2", size=10, hex_color=dark))
 
-    def escape_pdf_text(value: str) -> str:
-        sanitized = value.encode("latin-1", "replace").decode("latin-1")
-        return sanitized.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+    commands.append(_pdf_text(36, 522, "Active Directory Domains", font="F2", size=12, hex_color=dark))
 
-    def render_page(page_lines: list[str]) -> bytes:
-        commands = ["BT", "/F1 11 Tf", "50 792 Td"]
-        if page_lines:
-            commands.append(f"({escape_pdf_text(page_lines[0])}) Tj")
-            for line in page_lines[1:]:
-                commands.append(f"0 -16 Td ({escape_pdf_text(line)}) Tj")
-        commands.append("ET")
-        return "\n".join(commands).encode("latin-1", "replace")
+    table_start_y = 492
+    header_height = 22
+    body_height = 18
+
+    def add_domain_table_header(target: list[str], y: float) -> None:
+        labels = ["Domain", "Endpoints", "Total", "Human", "Service", "Admin"]
+        current_x = table_x
+        for label, width in zip(labels, domain_col_widths):
+            target.append(_pdf_fill_rect(current_x, y, width, header_height, red))
+            target.append(_pdf_stroke_rect(current_x, y, width, header_height, gray, 0.6))
+            target.append(_pdf_text(current_x + 6, y + 7, label, font="F2", size=9, hex_color=white))
+            current_x += width
+
+    add_domain_table_header(commands, table_start_y)
+
+    available_rows_first_page = max(0, int((table_start_y - 56) // body_height) - 1)
+    first_page_rows = domain_table_rows[:available_rows_first_page]
+    remaining_rows = domain_table_rows[available_rows_first_page:]
+
+    def add_domain_rows(target: list[str], rows: list[list[str]], start_y: float) -> None:
+        for row_index, row in enumerate(rows):
+            y = start_y - (row_index + 1) * body_height
+            fill = white if row_index % 2 == 0 else light_bg
+            current_x = table_x
+            for cell, width in zip(row, domain_col_widths):
+                target.append(_pdf_fill_rect(current_x, y, width, body_height, fill))
+                target.append(_pdf_stroke_rect(current_x, y, width, body_height, gray, 0.5))
+                target.append(_pdf_text(current_x + 5, y + 5, str(cell)[:34], size=8, hex_color=dark))
+                current_x += width
+
+    add_domain_rows(commands, first_page_rows, table_start_y)
+    page_commands.append("\n".join(commands))
+
+    rows_per_other_page = 38
+    while remaining_rows:
+        commands = []
+        commands.append(_pdf_text(36, 794, f"CrowdStrike Falcon Tenant Report | {tenant_label}", font="F2", size=16, hex_color=red))
+        commands.append(_pdf_text(36, 776, f"CID: {cid_value}", size=10, hex_color=dark))
+        add_domain_table_header(commands, 740)
+        page_rows = remaining_rows[:rows_per_other_page]
+        remaining_rows = remaining_rows[rows_per_other_page:]
+        add_domain_rows(commands, page_rows, 740)
+        page_commands.append("\n".join(commands))
+
+    if not page_commands:
+        page_commands = ["\n".join(commands)]
 
     objects: list[bytes] = []
-    page_objects: list[int] = []
-    content_objects: list[int] = []
-    font_object_number = 3 + len(pages) * 2
+    page_object_numbers: list[int] = []
+    image_object_number = None
 
     objects.append(b"<< /Type /Catalog /Pages 2 0 R >>")
     objects.append(b"<< /Type /Pages /Kids [] /Count 0 >>")
+    objects.append(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+    objects.append(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>")
 
-    for page_lines in pages:
-        content = render_page(page_lines)
-        page_object_number = len(objects) + 1
-        content_object_number = page_object_number + 1
-        page_objects.append(page_object_number)
-        content_objects.append(content_object_number)
+    if logo_image:
+        image_object_number = len(objects) + 1
+        image_stream = bytes(logo_image["data"])
         objects.append(
             (
-                f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] "
-                f"/Resources << /Font << /F1 {font_object_number} 0 R >> >> "
-                f"/Contents {content_object_number} 0 R >>"
+                f"<< /Type /XObject /Subtype /Image /Width {int(logo_image['width'])} /Height {int(logo_image['height'])} "
+                f"/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length {len(image_stream)} >>\nstream\n"
+            ).encode("ascii")
+            + image_stream
+            + b"\nendstream"
+        )
+
+    for command_stream in page_commands:
+        stream_bytes = command_stream.encode("latin-1", "replace")
+        page_object_number = len(objects) + 1
+        content_object_number = page_object_number + 1
+        page_object_numbers.append(page_object_number)
+
+        resources = "/Font << /F1 3 0 R /F2 4 0 R >>"
+        if image_object_number is not None and image_name:
+            resources += f" /XObject << /{image_name} {image_object_number} 0 R >>"
+
+        objects.append(
+            (
+                f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {page_width} {page_height}] "
+                f"/Resources << {resources} >> /Contents {content_object_number} 0 R >>"
             ).encode("ascii")
         )
         objects.append(
-            b"<< /Length " + str(len(content)).encode("ascii") + b" >>\nstream\n" + content + b"\nendstream"
+            b"<< /Length " + str(len(stream_bytes)).encode("ascii") + b" >>\nstream\n" + stream_bytes + b"\nendstream"
         )
 
-    kids = " ".join(f"{number} 0 R" for number in page_objects)
-    objects[1] = f"<< /Type /Pages /Kids [{kids}] /Count {len(page_objects)} >>".encode("ascii")
-    objects.append(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+    kids = " ".join(f"{number} 0 R" for number in page_object_numbers)
+    objects[1] = f"<< /Type /Pages /Kids [{kids}] /Count {len(page_object_numbers)} >>".encode("ascii")
 
     pdf = bytearray(b"%PDF-1.4\n")
     offsets = [0]

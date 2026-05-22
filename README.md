@@ -150,7 +150,7 @@ PDF output             : ACME-Group-0123456789ABCDEF0123456789ABCDEF-08-05-2026.
 - The script verifies Identity Protection GraphQL access before running the more expensive queries.
 - Some API clients do not expose a tenant display name directly. In that case, the script tries to derive a tenant label from the discovered Active Directory domains before falling back to the Falcon base URL host name, unless `FALCON_TENANT_NAME` is set.
 - The CSV export file name uses the structure `tenant-cid-dd-mm-yyyy.csv` and is written in the current working directory.
-- The PDF export uses the same base file name and contains a text-based summary that matches the terminal output.
+- The PDF export uses the same base file name and renders a styled summary page with the CrowdStrike header, key totals, and the Active Directory domain table.
 - If you place a local file named `crowdstrike-logo.png` next to the script, it will be embedded in the PDF header automatically.
 - Do not commit real credentials to GitHub.
 
