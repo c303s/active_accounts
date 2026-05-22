@@ -9,7 +9,7 @@ This repository contains a small Python script that connects to CrowdStrike Falc
 - a human, service, and admin split for those active identities
 - the Active Directory domains represented by those identities
 - a CSV export of the full report written after the terminal output completes
-- a PDF export with charts and CrowdStrike-themed styling
+- a PDF export of the same report summary
 
 The main script is `active_accounts.py`.
 
@@ -23,7 +23,7 @@ The script calls these Falcon REST APIs directly using only the Python standard 
 - Sensor Download (`/sensors/queries/installers/ccid/v1`)
 - Identity Protection GraphQL (`/identity-protection/combined/graphql/v1`)
 
-The only third-party dependency installed at first run is `reportlab` (for the PDF export).
+The script also generates the CSV and PDF outputs using only the Python standard library.
 
 Minimum API permissions:
 
@@ -37,7 +37,7 @@ Minimum API permissions:
 - Python 3.10 or newer (any system Python works; nothing else needed)
 - A CrowdStrike Falcon API client with the required scopes
 
-The script uses only the Python standard library for HTTP. On first run it installs a single dependency (`reportlab`, used for the PDF export) into a hidden folder named `.falcon-deps-pyX.Y/` next to `active_accounts.py` itself. Credentials are stored in a `.env` file next to the script as well. Nothing is written under `~/Library/Application Support` or any other user-wide data directory. Subsequent runs reuse the same folder; delete it to force a clean reinstall.
+The script uses only the Python standard library. Credentials are stored in a `.env` file next to `active_accounts.py`. Nothing is written under `~/Library/Application Support` or any other user-wide data directory, and no Python packages are installed at first run.
 
 ## Install And Run
 
@@ -53,7 +53,7 @@ The installer:
 - resolves the latest commit SHA on `main` via the GitHub API and downloads a SHA-pinned copy of `active_accounts.py` into the current directory (this avoids stale results from the raw.githubusercontent.com CDN cache)
 - launches it
 
-On the first launch the script shows an ASCII-art banner, installs `reportlab` into its hidden dependency directory, then walks you through entering `FALCON_CLIENT_ID`, `FALCON_CLIENT_SECRET`, and `FALCON_BASE_URL`. Before saving `.env`, it runs a quick pre-flight check against the Falcon APIs to verify the credentials and required access. Every later run is just:
+On the first launch the script shows a banner, walks you through entering `FALCON_CLIENT_ID`, `FALCON_CLIENT_SECRET`, and `FALCON_BASE_URL`, and then runs a quick pre-flight check against the Falcon APIs to verify the credentials and required access before saving `.env`. Every later run is just:
 
 ```bash
 python3 active_accounts.py
@@ -66,7 +66,7 @@ curl -fsSL https://raw.githubusercontent.com/c303s/crowdstrike-falcon-tenant-rep
 python3 active_accounts.py
 ```
 
-Behind a corporate proxy? Set `HTTPS_PROXY`/`HTTP_PROXY` before running so that `pip` (for `reportlab`) and the Falcon API calls can reach the internet:
+Behind a corporate proxy? Set `HTTPS_PROXY`/`HTTP_PROXY` before running so the Falcon API calls can reach the internet:
 
 ```bash
 export HTTPS_PROXY=http://proxy.example.com:8080
@@ -150,7 +150,7 @@ PDF output             : ACME-Group-0123456789ABCDEF0123456789ABCDEF-08-05-2026.
 - The script verifies Identity Protection GraphQL access before running the more expensive queries.
 - Some API clients do not expose a tenant display name directly. In that case, the script tries to derive a tenant label from the discovered Active Directory domains before falling back to the Falcon base URL host name, unless `FALCON_TENANT_NAME` is set.
 - The CSV export file name uses the structure `tenant-cid-dd-mm-yyyy.csv` and is written in the current working directory.
-- The PDF export uses the same base file name and adds a cleaner CrowdStrike-themed summary page with separate charts and a domain table.
+- The PDF export uses the same base file name and contains a text-based summary that matches the terminal output.
 - If you place a local file named `crowdstrike-logo.png` next to the script, it will be embedded in the PDF header automatically.
 - Do not commit real credentials to GitHub.
 

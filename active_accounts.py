@@ -2,8 +2,6 @@ import os
 import sys
 
 _REQUIRED_PYTHON = (3, 10)
-_DEPENDENCIES = ("reportlab",)
-_IMPORT_PROBES = ("reportlab",)
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -14,70 +12,6 @@ def _bootstrap() -> None:
             f"found {sys.version.split()[0]}.\n"
         )
         sys.exit(1)
-
-    import importlib
-    import importlib.util
-
-    if all(importlib.util.find_spec(name) is not None for name in _IMPORT_PROBES):
-        return
-
-    from pathlib import Path
-    import subprocess
-
-    # Install dependencies in a hidden directory next to the script itself,
-    # so we never touch ~/Library/Application Support or any other user-wide
-    # data directory. The directory name is Python-version-specific because
-    # site-packages aren't portable across minor versions.
-    script_dir = Path(SCRIPT_DIR)
-    deps_dir = script_dir / f".falcon-deps-py{sys.version_info.major}.{sys.version_info.minor}"
-
-    sys.path.insert(0, str(deps_dir))
-    importlib.invalidate_caches()
-    if all(importlib.util.find_spec(name) is not None for name in _IMPORT_PROBES):
-        return
-
-    try:
-        deps_dir.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
-        sys.stderr.write(
-            f"Cannot create dependency directory {deps_dir}: {exc}\n"
-            f"Run the script from a directory you can write to.\n"
-        )
-        sys.exit(1)
-    print(
-        f"First-run setup: installing dependencies into {deps_dir}",
-        file=sys.stderr,
-    )
-    try:
-        subprocess.check_call(
-            [
-                sys.executable,
-                "-m",
-                "pip",
-                "install",
-                "--quiet",
-                "--disable-pip-version-check",
-                "--target",
-                str(deps_dir),
-                "--upgrade",
-                *_DEPENDENCIES,
-            ]
-        )
-    except subprocess.CalledProcessError as exc:
-        sys.stderr.write(
-            f"Failed to install dependencies (pip exit {exc.returncode}).\n"
-            f"Try removing {deps_dir} and re-running the script,\n"
-            f"or check your network/proxy configuration.\n"
-        )
-        sys.exit(1)
-    except FileNotFoundError:
-        sys.stderr.write(
-            "Python's pip module is not available. Install it first:\n"
-            f"  {sys.executable} -m ensurepip --upgrade\n"
-        )
-        sys.exit(1)
-
-    importlib.invalidate_caches()
 
 
 _bootstrap()
@@ -97,16 +31,6 @@ from urllib import error as urllib_error
 from urllib import request as urllib_request
 from urllib.parse import urlencode, urlparse
 
-from reportlab.graphics.charts.barcharts import HorizontalBarChart
-from reportlab.graphics.charts.legends import Legend
-from reportlab.graphics.charts.piecharts import Pie
-from reportlab.graphics.shapes import Drawing, Rect, String
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.lib.units import mm
-from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
-
 
 TENANT_DISPLAY_NAMES = {
     "aunde": "AUNDE Group SE",
@@ -117,13 +41,6 @@ APP_VERSION = "0.01"
 DEFAULT_BASE_URL = "https://api.eu-1.crowdstrike.com"
 ENV_PATH = Path(SCRIPT_DIR) / ".env"
 LOGO_PATH = Path(SCRIPT_DIR) / "crowdstrike-logo.png"
-CROWDSTRIKE_RED = colors.HexColor("#E01E26")
-CROWDSTRIKE_BLACK = colors.HexColor("#1A1A1A")
-CROWDSTRIKE_DARK = colors.HexColor("#252525")
-CROWDSTRIKE_LIGHT = colors.HexColor("#F5F5F5")
-CROWDSTRIKE_GRAY = colors.HexColor("#D9D9D9")
-CROWDSTRIKE_MID = colors.HexColor("#5A5A5A")
-CROWDSTRIKE_PALE = colors.HexColor("#F1F1F1")
 
 
 def read_env_file(path: Path) -> dict[str, str]:
@@ -392,81 +309,6 @@ def sanitize_filename_component(value: str) -> str:
     return collapsed or "unknown"
 
 
-def build_identity_chart(account_counts: dict[str, int]) -> Drawing:
-    drawing = Drawing(500, 240)
-    drawing.add(Rect(0, 0, 500, 240, fillColor=colors.white, strokeColor=CROWDSTRIKE_GRAY))
-    drawing.add(String(18, 214, "Identity Distribution", fontName="Helvetica-Bold", fontSize=14, fillColor=CROWDSTRIKE_BLACK))
-
-    pie = Pie()
-    pie.x = 24
-    pie.y = 26
-    pie.width = 180
-    pie.height = 180
-    pie.data = [
-        account_counts["human"],
-        account_counts["service"],
-        account_counts["admin"],
-    ]
-    pie.labels = ["", "", ""]
-    pie.slices[0].fillColor = CROWDSTRIKE_RED
-    pie.slices[1].fillColor = CROWDSTRIKE_MID
-    pie.slices[2].fillColor = colors.HexColor("#9C9C9C")
-    pie.slices.strokeColor = colors.white
-    pie.sideLabels = False
-    drawing.add(pie)
-
-    legend = Legend()
-    legend.x = 250
-    legend.y = 150
-    legend.colorNamePairs = [
-        (CROWDSTRIKE_RED, f"Human ({account_counts['human']})"),
-        (CROWDSTRIKE_MID, f"Service ({account_counts['service']})"),
-        (colors.HexColor("#9C9C9C"), f"Admin ({account_counts['admin']})"),
-    ]
-    legend.fontName = "Helvetica"
-    legend.fontSize = 11
-    legend.dxTextSpace = 8
-    legend.dy = 18
-    legend.deltay = 22
-    drawing.add(legend)
-
-    return drawing
-
-
-def build_endpoint_chart(domain_rows: list[dict[str, int | str]]) -> Drawing:
-    drawing = Drawing(500, 260)
-    drawing.add(Rect(0, 0, 500, 260, fillColor=colors.white, strokeColor=CROWDSTRIKE_GRAY))
-    drawing.add(String(18, 232, "Endpoints by Domain", fontName="Helvetica-Bold", fontSize=14, fillColor=CROWDSTRIKE_BLACK))
-
-    top_domains = sorted(
-        domain_rows,
-        key=lambda row: (-int(row["endpoints"]), -int(row["total"]), str(row["domain"]).lower()),
-    )[:6]
-    chart_domains = list(reversed(top_domains))
-    bar_chart = HorizontalBarChart()
-    bar_chart.x = 165
-    bar_chart.y = 34
-    bar_chart.width = 300
-    bar_chart.height = 160
-    bar_chart.data = [[int(row["endpoints"]) for row in chart_domains] or [0]]
-    bar_chart.categoryAxis.categoryNames = [str(row["domain"])[:28] for row in chart_domains] or ["No domains"]
-    bar_chart.categoryAxis.labels.boxAnchor = "e"
-    bar_chart.categoryAxis.labels.dx = -10
-    bar_chart.categoryAxis.labels.fontName = "Helvetica"
-    bar_chart.categoryAxis.labels.fontSize = 9
-    bar_chart.valueAxis.labels.fontName = "Helvetica"
-    bar_chart.valueAxis.labels.fontSize = 9
-    bar_chart.valueAxis.strokeColor = CROWDSTRIKE_GRAY
-    bar_chart.categoryAxis.strokeColor = CROWDSTRIKE_GRAY
-    bar_chart.bars[0].fillColor = CROWDSTRIKE_RED
-    bar_chart.bars[0].strokeColor = CROWDSTRIKE_RED
-    bar_chart.barSpacing = 6
-    bar_chart.groupSpacing = 10
-    drawing.add(bar_chart)
-
-    return drawing
-
-
 def write_pdf_report(
     pdf_path: str,
     tenant_label: str,
@@ -478,162 +320,96 @@ def write_pdf_report(
     human_percentage: float,
     domain_rows: list[dict[str, int | str]],
 ) -> None:
-    doc = SimpleDocTemplate(
-        pdf_path,
-        pagesize=A4,
-        leftMargin=16 * mm,
-        rightMargin=16 * mm,
-        topMargin=16 * mm,
-        bottomMargin=16 * mm,
-    )
-
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle(
-        "CrowdStrikeTitle",
-        parent=styles["Title"],
-        fontName="Helvetica-Bold",
-        fontSize=20,
-        textColor=CROWDSTRIKE_RED,
-        spaceAfter=8,
-    )
-    subtitle_style = ParagraphStyle(
-        "CrowdStrikeSubtitle",
-        parent=styles["BodyText"],
-        fontName="Helvetica",
-        fontSize=10,
-        textColor=CROWDSTRIKE_DARK,
-        spaceAfter=8,
-    )
-    heading_style = ParagraphStyle(
-        "CrowdStrikeHeading",
-        parent=styles["Heading2"],
-        fontName="Helvetica-Bold",
-        fontSize=12,
-        textColor=CROWDSTRIKE_BLACK,
-        spaceBefore=10,
-        spaceAfter=6,
-    )
-    small_style = ParagraphStyle(
-        "CrowdStrikeSmall",
-        parent=styles["BodyText"],
-        fontName="Helvetica",
-        fontSize=9,
-        textColor=CROWDSTRIKE_DARK,
-        leading=12,
-    )
-
-    header_left = [
-        Paragraph(f"CrowdStrike Falcon Tenant Report v{APP_VERSION}", title_style),
-        Paragraph(f"Tenant: {tenant_label}<br/>CID: {cid_value}<br/>Generated: {current_timestamp}<br/>Version: {APP_VERSION}", subtitle_style),
+    lines = [
+        f"CrowdStrike Falcon Tenant Report v{APP_VERSION}",
+        "",
+        f"Tenant: {tenant_label}",
+        f"CID: {cid_value}",
+        f"Generated: {current_timestamp}",
+        "",
+        f"Protected endpoints: {total_endpoints}",
+        f"Human accounts: {category_counts['human']}",
+        f"Service accounts: {category_counts['service']}",
+        f"Admin accounts: {category_counts['admin']}",
+        f"Total active accounts: {total_active_accounts} ({human_percentage:.2f}% human)",
+        "",
+        "Active Directory Domains",
     ]
 
-    header_right = ""
-    if LOGO_PATH.exists():
-        header_right = Image(str(LOGO_PATH), width=46 * mm, height=16 * mm, kind="proportional")
-    else:
-        header_right = Table(
-            [[Paragraph("CROWDSTRIKE", ParagraphStyle("HeaderBadge", parent=small_style, fontName="Helvetica-Bold", fontSize=12, textColor=colors.white, alignment=1))]],
-            colWidths=[46 * mm],
-            rowHeights=[14 * mm],
-        )
-        header_right.setStyle(
-            TableStyle(
-                [
-                    ("BACKGROUND", (0, 0), (-1, -1), CROWDSTRIKE_RED),
-                    ("BOX", (0, 0), (-1, -1), 0, colors.white),
-                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ]
+    if domain_rows:
+        for row in domain_rows:
+            lines.append(
+                f"- {row['domain']} | Endpoints: {row['endpoints']} | Total: {row['total']} | "
+                f"Human: {row['human']} | Service: {row['service']} | Admin: {row['admin']}"
             )
+    else:
+        lines.append("- No Active Directory domains were found.")
+
+    max_lines_per_page = 44
+    pages = [lines[index:index + max_lines_per_page] for index in range(0, len(lines), max_lines_per_page)]
+    if not pages:
+        pages = [["CrowdStrike Falcon Tenant Report"]]
+
+    def escape_pdf_text(value: str) -> str:
+        sanitized = value.encode("latin-1", "replace").decode("latin-1")
+        return sanitized.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+    def render_page(page_lines: list[str]) -> bytes:
+        commands = ["BT", "/F1 11 Tf", "50 792 Td"]
+        if page_lines:
+            commands.append(f"({escape_pdf_text(page_lines[0])}) Tj")
+            for line in page_lines[1:]:
+                commands.append(f"0 -16 Td ({escape_pdf_text(line)}) Tj")
+        commands.append("ET")
+        return "\n".join(commands).encode("latin-1", "replace")
+
+    objects: list[bytes] = []
+    page_objects: list[int] = []
+    content_objects: list[int] = []
+    font_object_number = 3 + len(pages) * 2
+
+    objects.append(b"<< /Type /Catalog /Pages 2 0 R >>")
+    objects.append(b"<< /Type /Pages /Kids [] /Count 0 >>")
+
+    for page_lines in pages:
+        content = render_page(page_lines)
+        page_object_number = len(objects) + 1
+        content_object_number = page_object_number + 1
+        page_objects.append(page_object_number)
+        content_objects.append(content_object_number)
+        objects.append(
+            (
+                f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] "
+                f"/Resources << /Font << /F1 {font_object_number} 0 R >> >> "
+                f"/Contents {content_object_number} 0 R >>"
+            ).encode("ascii")
+        )
+        objects.append(
+            b"<< /Length " + str(len(content)).encode("ascii") + b" >>\nstream\n" + content + b"\nendstream"
         )
 
-    header_table = Table([[header_left, header_right]], colWidths=[122 * mm, 48 * mm])
-    header_table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, -1), CROWDSTRIKE_PALE),
-                ("BOX", (0, 0), (-1, -1), 0.8, CROWDSTRIKE_GRAY),
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("LEFTPADDING", (0, 0), (0, -1), 10),
-                ("RIGHTPADDING", (0, 0), (0, -1), 10),
-                ("LEFTPADDING", (1, 0), (1, -1), 2),
-                ("RIGHTPADDING", (1, 0), (1, -1), 10),
-                ("TOPPADDING", (0, 0), (-1, -1), 10),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
-                ("ALIGN", (1, 0), (1, -1), "LEFT"),
-            ]
-        )
+    kids = " ".join(f"{number} 0 R" for number in page_objects)
+    objects[1] = f"<< /Type /Pages /Kids [{kids}] /Count {len(page_objects)} >>".encode("ascii")
+    objects.append(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+
+    pdf = bytearray(b"%PDF-1.4\n")
+    offsets = [0]
+    for number, obj in enumerate(objects, start=1):
+        offsets.append(len(pdf))
+        pdf.extend(f"{number} 0 obj\n".encode("ascii"))
+        pdf.extend(obj)
+        pdf.extend(b"\nendobj\n")
+
+    xref_offset = len(pdf)
+    pdf.extend(f"xref\n0 {len(objects) + 1}\n".encode("ascii"))
+    pdf.extend(b"0000000000 65535 f \n")
+    for offset in offsets[1:]:
+        pdf.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
+    pdf.extend(
+        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF\n".encode("ascii")
     )
 
-    story = [header_table]
-
-    summary_table = Table(
-        [
-            ["Protected endpoints", f"{total_endpoints}"],
-            ["Human accounts", f"{category_counts['human']}"],
-            ["Service accounts", f"{category_counts['service']}"],
-            ["Admin accounts", f"{category_counts['admin']}"],
-            ["Total active accounts", f"{total_active_accounts} ({human_percentage:.2f}% human)"],
-        ],
-        colWidths=[60 * mm, 110 * mm],
-    )
-    summary_table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, -1), colors.white),
-                ("BOX", (0, 0), (-1, -1), 1, CROWDSTRIKE_GRAY),
-                ("INNERGRID", (0, 0), (-1, -1), 0.5, CROWDSTRIKE_GRAY),
-                ("BACKGROUND", (0, 0), (0, -1), CROWDSTRIKE_BLACK),
-                ("TEXTCOLOR", (0, 0), (0, -1), colors.white),
-                ("TEXTCOLOR", (1, 0), (1, -1), CROWDSTRIKE_BLACK),
-                ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
-                ("FONTSIZE", (0, 0), (-1, -1), 10),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-                ("TOPPADDING", (0, 0), (-1, -1), 8),
-            ]
-        )
-    )
-
-    story.append(summary_table)
-    story.append(Spacer(1, 10))
-    story.append(build_identity_chart(category_counts))
-    story.append(Spacer(1, 10))
-    story.append(build_endpoint_chart(domain_rows))
-    story.append(Spacer(1, 12))
-    story.append(Paragraph("Active Directory Domains", heading_style))
-
-    domain_table_data = [["Domain", "Endpoints", "Total", "Human", "Service", "Admin"]]
-    for row in domain_rows:
-        domain_table_data.append(
-            [
-                str(row["domain"]),
-                str(row["endpoints"]),
-                str(row["total"]),
-                str(row["human"]),
-                str(row["service"]),
-                str(row["admin"]),
-            ]
-        )
-
-    domain_table = Table(domain_table_data, colWidths=[58 * mm, 20 * mm, 20 * mm, 20 * mm, 22 * mm, 18 * mm])
-    domain_table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), CROWDSTRIKE_RED),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                ("FONTSIZE", (0, 0), (-1, -1), 9),
-                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, CROWDSTRIKE_LIGHT]),
-                ("BOX", (0, 0), (-1, -1), 1, CROWDSTRIKE_GRAY),
-                ("INNERGRID", (0, 0), (-1, -1), 0.5, CROWDSTRIKE_GRAY),
-                ("ALIGN", (1, 1), (-1, -1), "CENTER"),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("TOPPADDING", (0, 0), (-1, -1), 6),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-            ]
-        )
-    )
-    story.append(domain_table)
-    doc.build(story)
+    Path(pdf_path).write_bytes(pdf)
 
 
 def resolve_tenant_label(identity_protection: "FalconAPI") -> str | None:

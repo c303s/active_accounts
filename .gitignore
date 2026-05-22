@@ -1,6 +1,5 @@
 .env
 .env.bak
-.falcon-deps-py*/
 .venv/
 __pycache__/
 *.pyc
