@@ -521,15 +521,15 @@ def write_pdf_report(
     page_commands: list[str] = []
     commands: list[str] = []
 
-    header_y = 706
-    header_height = 104
+    header_y = 690
+    header_height = 120
     commands.append(_pdf_fill_rect(36, header_y, 523, header_height, light_bg))
     commands.append(_pdf_stroke_rect(36, header_y, 523, header_height, gray, 1.0))
-    commands.append(_pdf_text(52, 782, "CrowdStrike Falcon Tenant Report", font="F2", size=18, hex_color=red))
-    commands.append(_pdf_text(52, 762, f"Version {APP_VERSION}", font="F2", size=10, hex_color=mid))
-    commands.append(_pdf_text(52, 740, f"Tenant: {tenant_label}", font="F2", size=10, hex_color=dark))
-    commands.append(_pdf_text(52, 722, f"CID: {cid_value}", size=10, hex_color=dark))
-    commands.append(_pdf_text(52, 704, f"Generated: {current_timestamp}", size=10, hex_color=dark))
+    commands.append(_pdf_text(52, 780, "CrowdStrike Falcon Tenant Report", font="F2", size=18, hex_color=red))
+    commands.append(_pdf_text(52, 758, f"Version {APP_VERSION}", font="F2", size=10, hex_color=mid))
+    commands.append(_pdf_text(52, 734, f"Tenant: {tenant_label}", font="F2", size=10, hex_color=dark))
+    commands.append(_pdf_text(52, 714, f"CID: {cid_value}", size=10, hex_color=dark))
+    commands.append(_pdf_text(52, 694, f"Generated: {current_timestamp}", size=10, hex_color=dark))
 
     image_name = None
     if logo_image:
@@ -560,10 +560,10 @@ def write_pdf_report(
         commands.append(_pdf_text(table_x + 8, y + 8, label, font="F2", size=10, hex_color=white))
         commands.append(_pdf_text(table_x + label_width + 8, y + 8, value, font="F2", size=10, hex_color=dark))
 
-    chart_box_y = 390
-    chart_box_height = 130
+    chart_box_y = 398
+    chart_box_height = 122
     chart_origin_x = 176
-    chart_origin_y = 390
+    chart_origin_y = 398
     chart_bar_height = 18
     chart_gap = 14
     chart_max_width = 290
@@ -572,7 +572,6 @@ def write_pdf_report(
     commands.append(_pdf_fill_rect(36, chart_box_y, 523, chart_box_height, white))
     commands.append(_pdf_stroke_rect(36, chart_box_y, 523, chart_box_height, gray, 0.8))
     commands.append(_pdf_text(52, 502, "Active Accounts", font="F2", size=12, hex_color=dark))
-    commands.append(_pdf_text(52, 486, "Bar chart sorted by highest account count first.", size=9, hex_color=mid))
 
     for index, (label, value) in enumerate(chart_rows):
         y = chart_origin_y + (2 - index) * (chart_bar_height + chart_gap)
@@ -583,10 +582,10 @@ def write_pdf_report(
         commands.append(_pdf_stroke_rect(chart_origin_x, y, chart_max_width, chart_bar_height, gray, 0.6))
         commands.append(_pdf_text(chart_origin_x + chart_max_width + 10, y + 4, str(value), font="F2", size=10, hex_color=dark))
 
-    commands.append(_pdf_line(52, 382, 543, 382, gray, 0.8))
-    commands.append(_pdf_text(36, 358, "Active Directory Domains", font="F2", size=12, hex_color=dark))
+    commands.append(_pdf_line(52, 390, 543, 390, gray, 0.8))
+    commands.append(_pdf_text(36, 366, "Active Directory Domains", font="F2", size=12, hex_color=dark))
 
-    table_start_y = 328
+    table_start_y = 336
     header_row_height = 22
     body_height = 18
 
@@ -954,17 +953,34 @@ class Spinner:
         sys.stdout.write("\r" + " " * self._rendered_width + "\r")
         self._rendered_width = 0
 
+    def _render_current_step_locked(self, frame: str) -> None:
+        rendered = f"{self.message} {frame}"
+        self._rendered_width = max(self._rendered_width, len(rendered))
+        sys.stdout.write(f"\r{rendered}")
+        sys.stdout.flush()
+
+    def _complete_current_step_locked(self) -> None:
+        if not self.message:
+            return
+        if self._enabled:
+            self._clear_line_locked()
+            sys.stdout.write(f"{self.message} done!\n")
+        else:
+            sys.stdout.write(f"{self.message} done!\n")
+        sys.stdout.flush()
+
     def update(self, message: str) -> None:
         with self._message_lock:
-            if self._enabled and self._active:
-                self._clear_line_locked()
+            if self._active:
+                self._complete_current_step_locked()
             self.message = message
-            if self._enabled and not self._active:
+            if not self._active:
                 sys.stdout.write(f"{message}\n")
                 sys.stdout.flush()
 
     def start(self) -> None:
         if not self._enabled:
+            self._active = True
             return
         self._active = True
         self._thread = threading.Thread(target=self._spin, daemon=True)
@@ -980,7 +996,7 @@ class Spinner:
             self._thread.join()
             self._thread = None
         with self._message_lock:
-            self._clear_line_locked()
+            self._complete_current_step_locked()
         sys.stdout.flush()
 
     def _spin(self) -> None:
@@ -988,10 +1004,7 @@ class Spinner:
             if not self._active:
                 break
             with self._message_lock:
-                rendered = f"{self.message} {frame}"
-                self._rendered_width = max(self._rendered_width, len(rendered))
-                sys.stdout.write(f"\r{rendered}")
-                sys.stdout.flush()
+                self._render_current_step_locked(frame)
             time.sleep(0.1)
 
 
